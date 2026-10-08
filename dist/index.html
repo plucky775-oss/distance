@@ -26,6 +26,7 @@
     </section>
     <div class="steps"><span><b>01</b> 엑셀 불러오기</span><span><b>02</b> 주소 위치 확인</span><span><b>03</b> 거리·경로 확인</span><span class="formats">XLSX · CSV · 최대 <span id="limit-text">50</span>구간</span></div>
     <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section id="download-ready" class="download-ready" aria-label="준비된 결과 파일 저장" hidden><div><strong>결과 파일이 준비되었습니다</strong><div id="download-name"></div></div><div class="download-actions"><a id="download-link" class="secondary">파일 내려받기</a><button id="share-file" class="dark" hidden>공유·파일에 저장</button></div><p>엑셀 미리보기에서 지도가 안 보이면 Excel 앱으로 열거나, ‘엑셀·지도 ZIP 저장’으로 PNG 지도를 확인하세요.</p></section>
     <section class="workspace" aria-label="경로 작업 공간">
       <aside class="route-panel">
         <div class="panel-top"><div><span class="eyebrow">MY ROUTES</span><h2>이동 구간 <span id="row-count">0</span></h2></div><button id="clear-btn" class="text-button" disabled>비우기</button></div>
@@ -33,7 +34,7 @@
         <div class="list-actions"><button id="batch-btn" class="dark" disabled>주소 검색·거리 계산</button><button id="stop-btn" class="secondary" hidden>중지</button></div>
         <div class="progress-wrap" id="progress-wrap" hidden><progress id="progress" max="100" value="0"></progress><span id="progress-label"></span></div>
         <div id="route-list" class="route-list"><div class="empty-state"><div class="empty-icon" aria-hidden="true">＋</div><h3>첫 이동 구간을 추가하세요</h3><p>주소가 있는 엑셀을 불러오거나<br>예시로 사용 방법을 확인하세요.</p><button class="secondary" id="empty-sample">예시로 시작</button></div></div>
-        <div class="panel-bottom"><div><small>계산 완료 <span id="done-count">0</span>구간</small><div class="total"><span id="total-km">—</span><span>km</span></div></div><button id="export-btn" class="secondary" disabled>지도 포함 엑셀 저장</button></div>
+        <div class="panel-bottom"><div><small>계산 완료 <span id="done-count">0</span>구간</small><div class="total"><span id="total-km">—</span><span>km</span></div></div><div class="result-buttons"><button id="export-btn" class="secondary" disabled>지도 포함 엑셀 저장</button><button id="zip-btn" class="dark" disabled>엑셀·지도 ZIP 저장</button></div><p class="export-help">iPad에서 그림이 안 보이면 ZIP으로 저장하세요. 계산 완료된 구간의 지도가 포함됩니다.</p></div>
       </aside>
       <div class="map-column">
         <div class="map-shell"><div id="map" aria-label="안산시 단원구 상록구와 시흥시 정왕동 경로 지도"></div><div class="map-badge">자동차 · 편도 도로거리</div><button id="fit-btn" class="map-fit" aria-label="선택 경로 또는 대상 권역 전체 보기">경로 전체 보기</button><div id="map-hint" class="map-hint">안산 단원구·상록구 / 시흥 정왕동 · 대부도 제외</div><div id="pin-banner" class="pin-banner" hidden><span id="pin-message"></span><button id="cancel-pin" class="text-button">취소</button></div></div>

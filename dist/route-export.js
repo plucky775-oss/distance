@@ -2,6 +2,7 @@ import {exportRecords,statusLabel} from './core.js';
 
 export function imageKey(row){return JSON.stringify([row.origin.address,row.destination.address,row.origin.point?.lat,row.origin.point?.lng,row.destination.point?.lat,row.destination.point?.lng,row.route?.distance,row.route?.geometry]);}
 export function hasMapImage(row){return !!row.route&&row.mapImage?.key===imageKey(row)&&/^data:image\/png;base64,/.test(row.mapImage.dataUrl);}
+export function mapFilename(row){return `maps/route-${String(row.id).padStart(3,'0')}.png`;}
 function ellipsis(ctx,text,width){let result=String(text);if(ctx.measureText(result).width<=width)return result;while(result.length&&ctx.measureText(result+'…').width>width)result=result.slice(0,-1);return result+'…';}
 
 // Draw only the map tiles already loaded for the user's visible map. This makes
@@ -54,11 +55,17 @@ export async function captureVisibleMap(row,map,tileLayer,isCurrent){
 
 function styleSheet(sheet){sheet.views=[{state:'frozen',ySplit:1}];sheet.getRow(1).height=28;sheet.getRow(1).eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2154D8'}};c.alignment={vertical:'middle',wrapText:true};});sheet.autoFilter={from:{row:1,column:1},to:{row:1,column:sheet.columnCount}};}
 export function createResultWorkbook(ExcelJS,rows){
+ if(!rows.length)throw new Error('저장할 이동 구간이 없습니다.');
  const missing=rows.filter(r=>r.route&&!hasMapImage(r));if(missing.length)throw new Error(`${missing.length}개 구간의 지도 그림이 아직 준비되지 않았습니다.`);
  const book=new ExcelJS.Workbook();book.creator='경로노트';book.created=new Date();
  const report=book.addWorksheet('거리·경로지도');report.columns=[{header:'번호',key:'id',width:8},{header:'출발지',key:'origin',width:32},{header:'도착지',key:'destination',width:32},{header:'도로거리(km)',key:'km',width:16},{header:'상태',key:'status',width:17},{header:'경로 지도 (A 출발 · B 도착)',key:'map',width:88}];
- for(const r of rows){const row=report.addRow({id:r.id,origin:r.origin.address,destination:r.destination.address,km:r.route?r.route.distance/1000:'',status:statusLabel(r),map:r.route?'':(r.error||'거리 계산 후 지도가 포함됩니다.')});row.height=r.route?280:62;row.getCell(4).numFmt='0.00';row.eachCell({includeEmpty:true},c=>{c.alignment={vertical:'middle',wrapText:true};c.font={size:11};c.border={bottom:{style:'thin',color:{argb:'FFDDE5F0'}}};if(row.number%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8FD'}};});
-   if(r.route){const image=r.mapImage;const factor=Math.min(600/image.width,350/image.height);const width=image.width*factor,height=image.height*factor;const id=book.addImage({base64:image.dataUrl,extension:'png'});report.addImage(id,{tl:{col:5.04,row:row.number-1+.025},ext:{width,height},editAs:'oneCell'});}
+ for(const r of rows){const row=report.addRow({id:r.id,origin:r.origin.address,destination:r.destination.address,km:r.route?r.route.distance/1000:'',status:statusLabel(r),map:r.route?`지도 그림이 안 보이면 Excel 앱에서 열어 주세요.\nZIP 저장 시 별도 그림: ${mapFilename(r)}`:(r.error||'거리 계산 후 지도가 포함됩니다.')});row.height=r.route?320:62;row.getCell(4).numFmt='0.00';row.eachCell({includeEmpty:true},c=>{c.alignment={vertical:'middle',wrapText:true};c.font={size:11};c.border={bottom:{style:'thin',color:{argb:'FFDDE5F0'}}};if(row.number%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8FD'}};});
+   if(r.route){const image=r.mapImage;const factor=Math.min(600/image.width,350/image.height);const width=image.width*factor,height=image.height*factor;const id=book.addImage({base64:image.dataUrl,extension:'png'});
+     // Explicit two-cell anchors (EMU offsets at 96 dpi) preserve image size
+     // without relying on a viewer to infer the bottom-right from an extent.
+     report.addImage(id,{tl:{nativeCol:5,nativeColOff:8*9525,nativeRow:row.number-1,nativeRowOff:8*9525},br:{nativeCol:5,nativeColOff:Math.round((8+width)*9525),nativeRow:row.number-1,nativeRowOff:Math.round((8+height)*9525)},editAs:'oneCell'});
+     row.getCell(6).alignment={vertical:'bottom',wrapText:true};row.getCell(6).font={size:9,color:{argb:'FF526580'}};
+   }
  }
  styleSheet(report);report.pageSetup={paperSize:8,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'1:1',margins:{left:.25,right:.25,top:.4,bottom:.4,header:.15,footer:.15}};report.headerFooter={oddFooter:'&L경로노트 · OpenStreetMap / OSRM&R&P / &N'};
  const details=book.addWorksheet('상세결과');const data=exportRecords(rows);const keys=Object.keys(data[0]);details.columns=keys.map(k=>({header:k,key:k,width:/주소|출발지$|도착지$|확인/.test(k)?38:23}));details.addRows(data);styleSheet(details);details.eachRow((r,i)=>{if(i>1){r.height=35;r.eachCell(c=>c.alignment={vertical:'middle',wrapText:true});}});

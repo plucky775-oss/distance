@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {createDownloadController} from './dist/download.js';
+const messages=[],revoked=[],calls=[];
+const panel={hidden:true,scrollIntoView(){}},link={click(){throw new Error('Must not auto-click');},removeAttribute(k){delete this[k];}},shareButton={},nameLabel={};
+let count=0,shareError=null;
+const platform={File,URL:{createObjectURL:()=>`blob:test-${++count}`,revokeObjectURL:url=>revoked.push(url)},navigator:{canShare:()=>true,share:async payload=>{calls.push(payload);if(shareError)throw shareError;}}};
+const controller=createDownloadController({panel,link,shareButton,nameLabel,notify:(...args)=>messages.push(args)},platform);
+controller.prepare(new Blob(['abc'],{type:'application/zip'}),'지도.zip');
+assert.equal(calls.length,0);assert.equal(link.target,'_blank');assert.equal(link.rel,'noopener');assert.equal(link.download,'지도.zip');assert.equal(panel.hidden,false);assert.equal(shareButton.hidden,false);assert.equal(nameLabel.textContent,'지도.zip');
+await shareButton.onclick();assert.equal(calls.length,1);assert.equal(await calls[0].files[0].text(),'abc');assert.equal(shareButton.disabled,false);
+shareError={name:'AbortError'};const before=messages.length;await shareButton.onclick();assert.equal(messages.length,before);assert.equal(shareButton.disabled,false);
+shareError=new Error('Sharing not available');await shareButton.onclick();assert.equal(messages.at(-1)[1],true);
+controller.prepare(new Blob(['new']),'새 결과.xlsx');assert.deepEqual(revoked,['blob:test-1']);assert.equal(link.href,'blob:test-2');
+platform.navigator.canShare=()=>false;controller.prepare(new Blob(['png']),'지도.png');assert.equal(shareButton.hidden,true);link.onclick();assert.match(messages.at(-1)[0],/요청/);
+controller.clear();assert.equal(panel.hidden,true);assert.equal(link.href,undefined);assert.equal(revoked.length,3);
+console.log('PASS: fresh-tap download/share (no auto navigation), file bytes/name, unsupported sharing, cancellation/error, URL replacement and cleanup.');
