@@ -22,7 +22,7 @@ export function parseCSV(text){
   if(quoted)throw new Error('CSV 따옴표가 닫히지 않았습니다. 엑셀에서 XLSX 형식으로 다시 저장해 주세요.');
   if(field.length||row.length){row.push(field);rows.push(row);}return rows;
 }
-export function parseMatrix(matrix,maxRows=20){
+export function parseMatrix(matrix,maxRows=50){
   let headerIndex=-1,columns={};
   for(let i=0;i<Math.min(matrix.length,10);i++){
     const normalized=matrix[i].map(key);const found={};
