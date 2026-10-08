@@ -1,0 +1,8 @@
+Leaflet 1.9.4 - BSD-2-Clause - https://github.com/Leaflet/Leaflet
+ExcelJS 4.4.0 - MIT - https://github.com/exceljs/exceljs
+OpenStreetMap map data - ODbL - https://www.openstreetmap.org/copyright
+Public raster map tiles: https://operations.osmfoundation.org/policies/tiles/
+Photon geocoding: https://github.com/komoot/photon (Apache-2.0 engine)
+OSRM routing: https://github.com/Project-OSRM/osrm-backend (BSD-2-Clause engine)
+Public service policies: https://routing.openstreetmap.de/about.html
+No tile prefetching or offline downloads. Sequential user-triggered queries only.

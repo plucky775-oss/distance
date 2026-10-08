@@ -1,0 +1,9 @@
+{
+  "name": "distance-route-note",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Excel address pairs, road distances and embedded route maps",
+  "scripts": { "test": "node verify.mjs && node verify-map-export.mjs" },
+  "engines": { "node": ">=22" },
+  "devDependencies": { "@napi-rs/canvas": "0.1.100" }
+}
