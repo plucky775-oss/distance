@@ -34,6 +34,14 @@ python3 -m http.server 8080 --directory dist
 
 기존 배포에서 404가 표시됐다면 이 설정 파일이 포함된 최신 main으로 재배포합니다. 프로젝트를 다시 만들 필요는 없습니다.
 
+### Netlify 배포
+
+GitHub 저장소를 연결한 경우 루트의 `netlify.toml`이 공개 폴더를 `dist`로 지정합니다. Base directory는 저장소 루트(`.`), Publish directory는 `dist`, Build command는 비워 둡니다. Android 빌드는 웹 배포에 필요하지 않습니다.
+
+기존 배포에서 404가 표시됐다면 최신 main으로 다시 배포한 뒤 Netlify에 표시되는 현재 운영 사이트 주소를 여세요. 이전 배포 전용 주소는 새 배포로 바뀌지 않습니다.
+
+폴더를 직접 업로드하는 수동 배포에서는 `dist` 폴더를 업로드하세요. 업로드할 폴더를 열었을 때 바로 `index.html`, `app.js`, `style.css`, `vendor`가 보여야 합니다. 저장소 전체나 Android 프로젝트를 업로드하면 첫 화면을 찾지 못할 수 있습니다.
+
 ## 사용 순서
 
 1. 엑셀 양식을 내려받아 `출발지`, `도착지` 열에 주소를 입력합니다.
