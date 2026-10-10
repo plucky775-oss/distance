@@ -1,0 +1,7 @@
+{
+  "appId": "com.plucky775.routenote",
+  "appName": "경로노트",
+  "webDir": "mobile-www",
+  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false },
+  "server": { "androidScheme": "https" }
+}

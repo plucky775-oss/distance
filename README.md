@@ -12,6 +12,10 @@
 - 선택 구간의 지도 PNG 개별 저장
 - 엑셀과 구간별 지도 PNG를 한 ZIP으로 저장 (최대 50개 지도)
 
+## Android 앱
+
+웹주소를 열지 않고 실행되는 Android 프로젝트가 포함되어 있습니다. APK 생성·설치 방법은 [ANDROID.md](ANDROID.md)를 확인하세요. GitHub Actions의 **Android APK**에서 설치 확인용 APK를 생성합니다.
+
 ## 실행
 
 서버나 API 키 없이 정적 파일로 실행합니다. 프로젝트 루트에서:

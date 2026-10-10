@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';
+import {build} from 'esbuild';
+const root=new URL('../',import.meta.url);
+process.chdir(root.pathname);
+await fs.rm('mobile-www',{recursive:true,force:true});
+await fs.cp('dist','mobile-www',{recursive:true});
+let html=await fs.readFile('mobile-www/index.html','utf8');
+html=html.replace('<script type="module" src="./app.js"></script>','<script src="./native.js"></script>\n  <script type="module" src="./app.js"></script>');
+html=html.replace('content="width=device-width,initial-scale=1"','content="width=device-width,initial-scale=1,viewport-fit=cover"');
+await fs.writeFile('mobile-www/index.html',html);
+let css=await fs.readFile('mobile-www/style.css','utf8');
+css=css.replace(/^@import url\([^\n]+\);\s*/,'');
+css+='\nbody{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}\n';
+await fs.writeFile('mobile-www/style.css',css);
+await build({entryPoints:['mobile/native.js'],bundle:true,format:'iife',target:'chrome109',outfile:'mobile-www/native.js',minify:true});
+console.log('Android assets prepared locally; no hosted website URL is used.');

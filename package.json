@@ -3,7 +3,25 @@
   "version": "1.0.0",
   "private": true,
   "description": "Excel address pairs, road distances and embedded route maps",
-  "scripts": { "test": "node verify.mjs && node verify-map-export.mjs && node verify-result-package.mjs && node verify-download.mjs" },
-  "engines": { "node": ">=22" },
-  "devDependencies": { "@napi-rs/canvas": "0.1.100" }
+  "scripts": {
+    "test": "node verify.mjs && node verify-map-export.mjs && node verify-result-package.mjs && node verify-download.mjs && node verify-native-download.mjs",
+    "android:prepare": "node scripts/prepare-android.mjs",
+    "android:sync": "npm run android:prepare && cap sync android",
+    "android:open": "npm run android:sync && cap open android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@napi-rs/canvas": "0.1.100",
+    "esbuild": "0.25.12"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.4",
+    "@capacitor/share": "8.0.3"
+  }
 }

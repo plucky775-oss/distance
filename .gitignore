@@ -2,3 +2,8 @@ node_modules/
 .env
 .env.*
 .DS_Store
+mobile-www/
+*.jks
+*.keystore
+android/key.properties
+android/local.properties
