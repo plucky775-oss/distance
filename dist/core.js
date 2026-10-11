@@ -71,7 +71,7 @@ export function parseRoute(data){
   if(!Number.isFinite(route.distance)||route.distance<0||!Number.isFinite(route.duration)||route.duration<0||route.geometry?.type!=='LineString'||!Array.isArray(route.geometry.coordinates)||route.geometry.coordinates.length<2||!route.geometry.coordinates.every(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])))throw new Error('경로 서버 응답이 올바르지 않습니다. 다시 시도해 주세요.');
   return {distance:route.distance,duration:route.duration,geometry:route.geometry,snaps:(data.waypoints||[]).map(w=>({distance:w.distance,location:w.location})),calculatedAt:new Date().toISOString()};
 }
-export const statusLabel = row => ({pending:'검색 대기',searching:'검색 중',review:'위치 확인',routing:'계산 중',done:'계산 완료',error:'확인 필요'}[row.status]||'대기');
+export const statusLabel = row => row.status==='done'&&(!row.origin.confirmed||!row.destination.confirmed)?'자동 계산 · 위치 확인':({pending:'검색 대기',searching:'검색 중',review:'위치 확인',routing:'계산 중',done:'계산 완료',error:'확인 필요'}[row.status]||'대기');
 export function exportRecords(rows){return rows.map(r=>({
   원본행:r.sourceRow,출발지:r.origin.address,도착지:r.destination.address,
   출발검색주소:r.origin.point?.label||'',도착검색주소:r.destination.point?.label||'',
