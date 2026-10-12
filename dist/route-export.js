@@ -1,8 +1,23 @@
 import {exportRecords,statusLabel} from './core.js';
 
 export function imageKey(row){return JSON.stringify([row.origin.address,row.destination.address,row.origin.point?.lat,row.origin.point?.lng,row.destination.point?.lat,row.destination.point?.lng,row.route?.distance,row.route?.geometry]);}
-export function hasMapImage(row){return !!row.route&&row.mapImage?.key===imageKey(row)&&/^data:image\/png;base64,/.test(row.mapImage.dataUrl);}
-export function mapFilename(row){return `maps/route-${String(row.id).padStart(3,'0')}.png`;}
+export function hasMapImage(row){return !!row.route&&row.mapImage?.key===imageKey(row)&&/^data:image\/(?:png|jpeg);base64,/.test(row.mapImage.dataUrl);}
+export function imageFormat(image){return image.dataUrl.startsWith('data:image/jpeg;')?'jpeg':'png';}
+export function mapFilename(row){return `maps/route-${String(row.id).padStart(3,'0')}.${imageFormat(row.mapImage||{dataUrl:''})==='jpeg'?'jpg':'png'}`;}
+export const MAP_MAX_BYTES=300000;
+const dataBytes=url=>{const b=url.split(',')[1];return b.length*3/4-(b.endsWith('==')?2:b.endsWith('=')?1:0);};
+export function compressMap(canvas,createCanvas,maxBytes=MAP_MAX_BYTES){
+ let work=canvas;
+ for(let attempt=0;attempt<10;attempt++){
+   const encode=quality=>{const dataUrl=work.toDataURL('image/jpeg',quality);if(!dataUrl.startsWith('data:image/jpeg;base64,'))throw new Error('이 기기에서 JPG 지도 저장을 지원하지 않습니다.');return {dataUrl,byteLength:dataBytes(dataUrl),width:work.width,height:work.height};};
+   let best=encode(.95);if(best.byteLength<=maxBytes)return best;
+   best=encode(.55);
+   if(best.byteLength<=maxBytes){let low=.55,high=.95;for(let i=0;i<7;i++){const mid=(low+high)/2,result=encode(mid);if(result.byteLength<=maxBytes){best=result;low=mid;}else high=mid;}return best;}
+   const next=createCanvas(Math.max(1,Math.floor(work.width*.85)),Math.max(1,Math.floor(work.height*.85)));
+   const ctx=next.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(canvas,0,0,next.width,next.height);work=next;
+ }
+ throw new Error('지도를 300KB 이하로 줄이지 못했습니다. 지도 화면 크기를 줄여 다시 저장해 주세요.');
+}
 function ellipsis(ctx,text,width){let result=String(text);if(ctx.measureText(result).width<=width)return result;while(result.length&&ctx.measureText(result+'…').width>width)result=result.slice(0,-1);return result+'…';}
 
 // Draw only the map tiles already loaded for the user's visible map. This makes
@@ -30,7 +45,7 @@ export function renderMapCard(row,view,createCanvas=(w,h)=>{const c=document.cre
  ctx.restore();ctx.fillStyle='#ffffff';ctx.fillRect(0,header+mapHeight,width,footer);
  ctx.fillStyle='#425573';ctx.font='18px sans-serif';ctx.fillText('자동차 편도 도로거리 · 실시간 교통 미반영 · 점선 연결거리 제외',24,height-39);
  ctx.font='16px sans-serif';ctx.fillText('© OpenStreetMap contributors · openstreetmap.org/copyright · 경로: OSRM',24,height-13);
- return {dataUrl:canvas.toDataURL('image/png'),width,height,key:imageKey(row)};
+ return {...compressMap(canvas,createCanvas),key:imageKey(row)};
 }
 
 export async function captureVisibleMap(row,map,tileLayer,isCurrent){
@@ -60,7 +75,7 @@ export function createResultWorkbook(ExcelJS,rows){
  const book=new ExcelJS.Workbook();book.creator='경로노트';book.created=new Date();
  const report=book.addWorksheet('거리·경로지도');report.columns=[{header:'번호',key:'id',width:8},{header:'출발지',key:'origin',width:32},{header:'도착지',key:'destination',width:32},{header:'도로거리(km)',key:'km',width:16},{header:'상태',key:'status',width:17},{header:'경로 지도 (A 출발 · B 도착)',key:'map',width:88}];
  for(const r of rows){const row=report.addRow({id:r.id,origin:r.origin.address,destination:r.destination.address,km:r.route?r.route.distance/1000:'',status:statusLabel(r),map:r.route?`지도 그림이 안 보이면 Excel 앱에서 열어 주세요.\nZIP 저장 시 별도 그림: ${mapFilename(r)}`:(r.error||'거리 계산 후 지도가 포함됩니다.')});row.height=r.route?320:62;row.getCell(4).numFmt='0.00';row.eachCell({includeEmpty:true},c=>{c.alignment={vertical:'middle',wrapText:true};c.font={size:11};c.border={bottom:{style:'thin',color:{argb:'FFDDE5F0'}}};if(row.number%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8FD'}};});
-   if(r.route){const image=r.mapImage;const factor=Math.min(600/image.width,350/image.height);const width=image.width*factor,height=image.height*factor;const id=book.addImage({base64:image.dataUrl,extension:'png'});
+   if(r.route){const image=r.mapImage;const factor=Math.min(600/image.width,350/image.height);const width=image.width*factor,height=image.height*factor;const id=book.addImage({base64:image.dataUrl,extension:imageFormat(image)});
      // Explicit two-cell anchors (EMU offsets at 96 dpi) preserve image size
      // without relying on a viewer to infer the bottom-right from an extent.
      report.addImage(id,{tl:{nativeCol:5,nativeColOff:8*9525,nativeRow:row.number-1,nativeRowOff:8*9525},br:{nativeCol:5,nativeColOff:Math.round((8+width)*9525),nativeRow:row.number-1,nativeRowOff:Math.round((8+height)*9525)},editAs:'oneCell'});

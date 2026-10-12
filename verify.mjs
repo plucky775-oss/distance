@@ -6,7 +6,7 @@ const require=createRequire(import.meta.url),ExcelJS=require('./dist/vendor/exce
 const rows=parseMatrix([['출발지','도착지'],['안산시청','정왕본동 행정복지센터'],['','상록구청']]);
 assert.equal(rows.length,2);assert.equal(rows[1].status,'error');assert.equal(rows[0].sourceRow,2);
 assert.equal(parseMatrix([['보고서'],[' 출발지 주소 ','도착지주소'],['안산시청','상록구청']])[0].sourceRow,3);
-assert.throws(()=>parseMatrix([['출발지','도착지'],...Array(51).fill(['안산시청','상록구청'])]),/최대 50/);
+assert.throws(()=>parseMatrix([['출발지','도착지'],...Array(201).fill(['안산시청','상록구청'])]),/최대 200/);
 assert.equal(parseMatrix([['출발지','도착지'],['대부북동 1','안산시청']])[0].invalid,true);
 assert.equal(excludedAddress('안산시 단원구 선감동'),true);
 assert.equal(parseMatrix([['출발지','도착지','출발위도','출발경도'],['안산시청','정왕동',37.322,126.831]])[0].origin.confirmed,true);
@@ -24,7 +24,7 @@ const html=fs.readFileSync('dist/index.html','utf8');for(const [,path]of html.ma
 assert.match(html,/대부도 제외/);assert.doesNotMatch(fs.readFileSync('dist/config.json','utf8'),/nominatim.openstreetmap.org/);
 console.log('PASS: XLSX read/write; CSV; headers; missing addresses; row limit; coordinate validation; Daebudo exclusion; regional search filtering; routing failures; distance export; local assets.');
 
-const fifty=parseMatrix([['출발지','도착지'],...Array(50).fill(['안산시청','상록구청'])]);
-assert.equal(fifty.length,50);assert.equal(exportRecords(fifty).length,50);assert.equal(fifty[49].sourceRow,51);
-assert.equal(JSON.parse(fs.readFileSync('dist/config.json','utf8')).maxRows,50);
-assert.match(html,/id="limit-text">50/);console.log('PASS: 50 input rows and 50 output records; 51 rows rejected.');
+const twoHundred=parseMatrix([['출발지','도착지'],...Array(200).fill(['안산시청','상록구청'])]);
+assert.equal(twoHundred.length,200);assert.equal(exportRecords(twoHundred).length,200);assert.equal(twoHundred[199].sourceRow,201);
+assert.equal(JSON.parse(fs.readFileSync('dist/config.json','utf8')).maxRows,200);
+assert.match(html,/id="limit-text">200/);console.log('PASS: 200 input rows and 200 output records; 201 rows rejected.');

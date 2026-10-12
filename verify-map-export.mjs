@@ -15,9 +15,9 @@ const tile=createCanvas(800,420);const tc=tile.getContext('2d');tc.fillStyle='#e
 const image=renderMapCard(r,{width:800,height:420,routePoints:[{x:80,y:350},{x:310,y:280},{x:700,y:90}],endpoints:[{x:80,y:350},{x:700,y:90}],tiles:[{image:tile,x:0,y:0,width:800,height:420}]},createCanvas);
 r.mapImage=image;assert.equal(hasMapImage(r),true);const key=image.key;r.destination.address+=' 변경';assert.equal(hasMapImage(r),false);assert.throws(()=>createResultWorkbook(ExcelJS,rows),/지도 그림/);r.destination.address=r.destination.address.replace(' 변경','');assert.equal(hasMapImage(r),true);
 const book=createResultWorkbook(ExcelJS,rows);assert.equal(book.worksheets.length,2);assert.equal(book.worksheets[0].getImages().length,1);assert.equal(book.worksheets[0].getCell('D2').value,9.7352);assert.equal(book.worksheets[0].getCell('D3').value,'');
-const bytes=await book.xlsx.writeBuffer();const read=new ExcelJS.Workbook();await read.xlsx.load(bytes);assert.equal(read.worksheets[0].getImages().length,1);assert.equal(read.model.media[0].extension,'png');assert.equal(read.worksheets[1].getCell('B2').value,'안산시청');assert.equal(read.worksheets[0].getImages()[0].range.tl.nativeRow,1);
+const bytes=await book.xlsx.writeBuffer();const read=new ExcelJS.Workbook();await read.xlsx.load(bytes);assert.equal(read.worksheets[0].getImages().length,1);assert.equal(read.model.media[0].extension,'jpeg');assert.equal(read.worksheets[1].getCell('B2').value,'안산시청');assert.equal(read.worksheets[0].getImages()[0].range.tl.nativeRow,1);
 const portrait=renderMapCard(r,{width:350,height:310,routePoints:[{x:30,y:250},{x:280,y:40}],endpoints:[{x:30,y:250},{x:280,y:40}],tiles:[{image:tile,x:0,y:0,width:350,height:310}]},createCanvas);assert.ok(portrait.height>portrait.width);
 await assert.rejects(captureVisibleMap(r,null,null,()=>false),/구간이 바뀌어/);
-fs.writeFileSync(path.join(os.tmpdir(),'route-note-map-export-test.png'),Buffer.from(image.dataUrl.split(',')[1],'base64'));
+fs.writeFileSync(path.join(os.tmpdir(),'route-note-map-export-test.jpg'),Buffer.from(image.dataUrl.split(',')[1],'base64'));
 fs.writeFileSync(path.join(os.tmpdir(),'route-note-map-export-test.xlsx'),Buffer.from(bytes));
-console.log('PASS: map card PNG rendering, portrait rendering, embedded PNG XLSX round-trip, row anchors, failed-row handling, stale-image rejection, canceled capture.');
+console.log('PASS: map card JPEG rendering, portrait rendering, embedded JPEG XLSX round-trip, row anchors, failed-row handling, stale-image rejection, canceled capture.');

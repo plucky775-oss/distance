@@ -2,7 +2,12 @@
   "geocoder": "https://photon.komoot.io/api/",
   "router": "https://router.project-osrm.org/route/v1/driving/",
   "tiles": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "maxRows": 50,
+  "maxRows": 200,
   "requestIntervalMs": 1200,
-  "bbox": [126.67, 37.25, 126.96, 37.42]
+  "bbox": [
+    126.67,
+    37.25,
+    126.96,
+    37.42
+  ]
 }
