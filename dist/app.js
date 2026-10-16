@@ -3,7 +3,7 @@ import {createResultPackage} from './result-package.js';
 import {createDownloadController} from './download.js';
 import {AREA,clean,escapeHtml as esc,insideBox,excludedAddress,parseCSV,parseMatrix,photonPoints,parseRoute,statusLabel,exportRecords} from './core.js';
 const $=id=>document.getElementById(id);
-let config,rows=[],selectedId=null,busy=false,stopRequested=false,map,layer,pinMode=null,activeController=null,lastRequest=0,lastViewKey='',sheets=[],fileName='',tileLayer=null,capturing=false;
+let config,rows=[],selectedId=null,busy=false,stopRequested=false,map,layer,pinMode=null,activeController=null,lastRequest=0,lastViewKey='',sheets=[],fileName='',tileLayer=null,capturing=false,exporting=false;
 const searchCache=new Map(),routeCache=new Map();
 const downloads=createDownloadController({panel:$('download-ready'),link:$('download-link'),shareButton:$('share-file'),nameLabel:$('download-name'),notify});
 const emptyInspector=$('inspector').innerHTML,emptyList=$('route-list').innerHTML;
@@ -23,7 +23,7 @@ function renderList(){
  $('batch-btn').disabled=busy||!rows.length||!config;
  $('clear-btn').disabled=busy||!rows.length;$('export-btn').disabled=busy||!rows.length;$('zip-btn').disabled=busy||!rows.length;
  for(const id of ['upload-btn','sample-btn','empty-sample','sheet-select'])if($(id))$(id).disabled=busy;
- $('stop-btn').hidden=!busy||capturing;$('stop-btn').disabled=stopRequested;
+ $('stop-btn').hidden=!busy||(capturing&&!exporting);$('stop-btn').disabled=stopRequested;
 }
 function endpointEditor(r,k,label){const e=r[k];const point=e.point;
  const opts=e.candidates.map((p,i)=>`<option value="${i}" ${point&&point.lng===p.lng&&point.lat===p.lat?'selected':''}>${esc(p.label)}${p.kind==='bus_stop'?' [버스정류장]':''}</option>`).join('');
@@ -102,24 +102,41 @@ async function prepareMap(r){
  if(selectedId!==r.id||!r.route)throw new Error('지도 그림을 저장할 구간을 먼저 선택해 주세요.');
  const key=imageKey(r);capturing=true;setBusy(true);document.querySelector('.map-shell').classList.add('is-capturing');map.dragging.disable();map.touchZoom.disable();map.scrollWheelZoom.disable();map.doubleClickZoom.disable();map.keyboard.disable();map.zoomControl?.disable?.();
  notify(`구간 ${r.id}의 지도 그림을 준비하고 있습니다…`);
- try{drawMap(true);r.mapImage=await captureVisibleMap(r,map,tileLayer,()=>selectedId===r.id&&imageKey(r)===key);notify(`구간 ${r.id}의 지도 그림이 준비되었습니다. 지도 포함 엑셀 또는 JPG로 저장할 수 있습니다.`);return r.mapImage;}
- finally{capturing=false;document.querySelector('.map-shell').classList.remove('is-capturing');map.dragging.enable();map.touchZoom.enable();map.scrollWheelZoom.enable();map.doubleClickZoom.enable();map.keyboard.enable();setBusy(false);}
+ try{drawMap(true);r.mapImage=await captureVisibleMap(r,map,tileLayer,()=>selectedId===r.id&&imageKey(r)===key&&(!exporting||!stopRequested));notify(`구간 ${r.id}의 지도 그림이 준비되었습니다. 지도 포함 엑셀 또는 JPG로 저장할 수 있습니다.`);return r.mapImage;}
+ finally{capturing=false;document.querySelector('.map-shell').classList.remove('is-capturing');map.dragging.enable();map.touchZoom.enable();map.scrollWheelZoom.enable();map.doubleClickZoom.enable();map.keyboard.enable();setBusy(exporting);}
 }
 async function saveSelectedMap(){const r=selected();if(busy||!r?.route)return;try{const img=await prepareMap(r);const bytes=Uint8Array.from(atob(img.dataUrl.split(',')[1]),c=>c.charCodeAt(0));downloadBlob(new Blob([bytes],{type:`image/${imageFormat(img)}`}),`경로노트_구간${String(r.id).padStart(2,'0')}.${imageFormat(img)==='jpeg'?'jpg':'png'}`);notify('지도 JPG가 준비됐습니다. 아래 ‘파일 내려받기’ 또는 ‘공유·파일에 저장’을 눌러 주세요.');}catch(e){notify(e.message,true);}}
 async function exportWithMaps(format='xlsx'){
  if(busy||!rows.length)return;
+ const previousSelection=selectedId;
+ exporting=true;stopRequested=false;setBusy(true);
+ $('progress-wrap').hidden=false;
  try{
    downloads.clear();
-   const saveLabel=format==='zip'?'엑셀·지도 ZIP 저장':'지도 포함 엑셀 저장';
    const missing=rows.filter(r=>r.route&&!hasMapImage(r));
-   if(missing.length){const r=missing.find(r=>r.id===selectedId)||missing[0];selectedId=r.id;render();await prepareMap(r);const rest=rows.filter(r=>r.route&&!hasMapImage(r));if(rest.length){notify(`구간 ${r.id} 지도 준비 완료. 남은 ${rest.length}개 지도를 확인하려면 ‘${saveLabel}’을 다시 눌러주세요.`);return;}}
-   capturing=true;setBusy(true);notify('거리와 지도 그림을 포함한 엑셀을 만드는 중입니다…');
+   const total=rows.filter(r=>r.route).length;
+   let prepared=total-missing.length;
+   const progress=()=>{$('progress').value=total?prepared/total*100:100;$('progress-label').textContent=`지도 ${prepared} / ${total}개 준비`;};
+   progress();
+   for(const r of missing){
+     if(stopRequested)break;
+     selectedId=r.id;render();
+     notify(`지도 ${prepared+1} / ${total}개 준비 중 · 완료 후 저장 파일을 만듭니다. 화면을 켜 두세요.`);
+     try{await prepareMap(r);}catch(e){if(stopRequested)break;throw new Error(`구간 ${r.id}: ${e.message} 준비된 지도는 유지됩니다. 저장을 다시 누르면 이어서 진행합니다.`);}
+     prepared++;progress();
+     // Display and capture one map at a time; no parallel tile prefetch.
+     if(prepared<total)await delay(1200);
+   }
+   if(stopRequested){notify(`지도 준비를 중지했습니다. ${prepared}개는 유지됩니다. 저장 버튼을 누르면 이어서 진행합니다.`);return;}
+   capturing=true;renderList();notify('지도 준비 완료. 저장 파일을 만드는 중입니다…');
    const book=createResultWorkbook(ExcelJS,rows);const bytes=await book.xlsx.writeBuffer();
+   if(stopRequested){notify('파일 생성을 중지했습니다. 준비된 지도는 유지됩니다.');return;}
    const date=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}),done=rows.filter(r=>r.route).length;
    if(format==='zip')downloadBlob(createResultPackage(rows,bytes),`경로노트_엑셀과지도_${date}.zip`);
    else downloadBlob(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`경로노트_지도포함_거리결과_${date}.xlsx`);
-   notify(`${format==='zip'?'엑셀·지도 ZIP':'지도 포함 엑셀'}이 준비됐습니다. 전체 ${rows.length}구간 중 지도 ${done}개, 미계산 ${rows.length-done}개입니다. 아래 저장 버튼을 눌러 주세요.`);
- }catch(e){notify('결과 저장: '+e.message,true);}finally{capturing=false;setBusy(false);}
+   notify(`${format==='zip'?'엑셀·지도 ZIP':'지도 포함 엑셀'} 준비 완료 · 지도 ${done}개, 미계산 ${rows.length-done}개. 아래 ‘파일 내려받기’ 또는 ‘공유·파일에 저장’을 눌러 주세요.`);
+ }catch(e){notify('결과 저장: '+e.message,true);}
+ finally{exporting=false;capturing=false;stopRequested=false;selectedId=previousSelection;$('progress-wrap').hidden=true;setBusy(false);}
 }
 function bindEvents(){
  $('upload-btn').onclick=()=>$('file-input').click();$('file-input').onchange=e=>importFile(e.target.files[0]);$('sample-btn').onclick=sample;
@@ -128,7 +145,7 @@ function bindEvents(){
  $('batch-btn').onclick=runBatch;$('stop-btn').onclick=()=>{stopRequested=true;activeController?.abort();$('stop-btn').disabled=true;};
  $('clear-btn').onclick=()=>{rows=[];selectedId=null;fileName='';sheets=[];removeSheetPicker();cancelPin();render();notify('');};
  $('export-btn').onclick=()=>exportWithMaps('xlsx');$('zip-btn').onclick=()=>exportWithMaps('zip');
- $('fit-btn').onclick=()=>drawMap(true);$('cancel-pin').onclick=()=>{cancelPin();drawMap();};
+ $('fit-btn').onclick=()=>{if(!busy)drawMap(true);};$('cancel-pin').onclick=()=>{cancelPin();drawMap();};
  $('inspector').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.dataset.search)searchOne(b.dataset.search);else if(b.dataset.pin){pinMode=b.dataset.pin;$('pin-banner').hidden=false;$('pin-message').textContent=`지도를 눌러 ${pinMode==='origin'?'출발지 A':'도착지 B'} 위치를 지정하세요.`;$('map-hint').hidden=true;$('map').classList.add('pin-mode');map.doubleClickZoom.disable();}else if(b.id==='calculate-selected')calculateSelected();else if(b.id==='png-btn')saveSelectedMap();});
  $('inspector').addEventListener('input',e=>{if(busy)return;const r=selected(),kind=e.target.dataset.address;if(!r||!kind)return;const address=clean(e.target.value);if(address===r[kind].address)return;r[kind]={address,point:null,candidates:[],confirmed:false,searched:false};clearRoute(r);validateRow(r);renderList();drawMap();const editor=e.target.closest('.point-editor');editor.querySelector('select')?.remove();editor.querySelector('.coordinate').textContent='주소를 검색하거나 지도에서 지정하세요.';$('calculate-selected').disabled=true;$('calculate-selected').textContent='위치 확인·거리 계산';document.querySelector('.route-measure')?.remove();document.querySelector('.snap-note')?.remove();document.querySelector('.row-error')?.remove();});
  $('inspector').addEventListener('change',e=>{if(busy)return;const r=selected();if(!r)return;const candidate=e.target.dataset.candidate;if(candidate){const p=r[candidate].candidates[+e.target.value];if(p){r[candidate].point=p;r[candidate].confirmed=false;clearRoute(r);render();}}});
@@ -136,7 +153,7 @@ function bindEvents(){
 }
 function registerAgentTools(){if(!document.modelContext?.registerTool)return;const controller=new AbortController();window.addEventListener('pagehide',()=>controller.abort(),{once:true});
  const tools=[{name:'read_route_results',title:'거리 계산 결과 읽기',description:'현재 불러온 구간의 주소, 계산 완료 여부, 도로거리와 확인사항을 읽습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>exportRecords(rows)},
- {name:'select_route',title:'구간 지도 보기',description:'현재 불러온 구간 중 하나를 선택해 지도와 위치 확인 화면을 표시합니다. 거리 계산을 실행하지 않습니다.',inputSchema:{type:'object',properties:{id:{type:'integer',minimum:1}},required:['id'],additionalProperties:false},annotations:{readOnlyHint:false},execute:input=>{if(!input||!Number.isInteger(input.id)||!rows.some(r=>r.id===input.id))throw new Error('존재하는 구간 번호를 입력해 주세요.');selectedId=input.id;cancelPin();render();return {selectedId,status:statusLabel(selected())};}}];
+ {name:'select_route',title:'구간 지도 보기',description:'현재 불러온 구간 중 하나를 선택해 지도와 위치 확인 화면을 표시합니다. 거리 계산을 실행하지 않습니다.',inputSchema:{type:'object',properties:{id:{type:'integer',minimum:1}},required:['id'],additionalProperties:false},annotations:{readOnlyHint:false},execute:input=>{if(busy)throw new Error('작업 중에는 구간을 변경할 수 없습니다.');if(!input||!Number.isInteger(input.id)||!rows.some(r=>r.id===input.id))throw new Error('존재하는 구간 번호를 입력해 주세요.');selectedId=input.id;cancelPin();render();return {selectedId,status:statusLabel(selected())};}}];
  for(const tool of tools){try{Promise.resolve(document.modelContext.registerTool(tool,{signal:controller.signal})).catch(()=>{});}catch{}}
 }
 async function init(){bindEvents();try{const res=await fetch('./config.json');if(!res.ok)throw new Error('지도 설정을 읽을 수 없습니다.');config=await res.json();config.bbox=config.bbox||AREA.bbox;$('limit-text').textContent=config.maxRows;
