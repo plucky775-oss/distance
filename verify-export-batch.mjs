@@ -9,7 +9,7 @@ function fixture(n){
  $:id=>elements[id]??={},notify:m=>messages.push(m),render:()=>{},renderList:()=>{},setBusy:v=>{c.busy=v;},downloads:{clear:()=>{}},hasMapImage:r=>!!r.mapImage,
  delay:async()=>{assert.equal(c.busy,true);},prepareMap:async r=>{assert.equal(c.busy,true);assert.equal(c.selectedId,r.id);captured.push(r.id);r.mapImage={};},
  createResultWorkbook:(_,rows)=>{assert.ok(rows.every(r=>!r.route||r.mapImage));return {xlsx:{writeBuffer:async()=>new Uint8Array([1,2])}};},
- createResultPackage:()=>new Blob(['zip']),downloadBlob:(blob,name)=>saved.push({blob,name})};
+ createResultPackage:()=>new Blob(['zip']),downloadBlob:(blob,name,onSaved)=>saved.push({blob,name,onSaved})};
  vm.createContext(c);vm.runInContext(fn,c);return {c,captured,saved,elements,messages};
 }
 let f=fixture(200);await f.c.exportWithMaps('zip');assert.equal(f.captured.length,200);assert.equal(f.saved.length,1);assert.match(f.saved[0].name,/zip$/);assert.equal(f.c.busy,false);assert.equal(f.c.selectedId,1);assert.equal(f.elements.progress.value,100);
@@ -24,13 +24,18 @@ const prep=source.slice(source.indexOf('async function prepareMap('),source.inde
 assert.match(prep,/setBusy\(exporting\)/);assert.match(prep,/!exporting\|\|!stopRequested/);
 console.log('Export: 200 maps in one action, XLSX/ZIP, cached maps, failure/resume, stop/resume, uncalculated rows, reentry and cancellation passed.');
 
-f=fixture(1300);
+f=fixture(2300);
 const groups=[];
 f.c.createResultWorkbook=(_,rows)=>{assert.ok(rows.length<=200);assert.ok(rows.every(r=>r.mapImage));groups.push(rows.map(r=>r.id));return {xlsx:{writeBuffer:async()=>new Uint8Array([1])}};};
-for(let i=0;i<7;i++){f.c.exportPart=i;await f.c.exportWithMaps('zip');assert.ok(f.c.rows.filter(r=>r.mapImage).length<=200);}
-assert.equal(f.saved.length,7);
-assert.deepEqual(groups.flat(),Array.from({length:1300},(_,i)=>i+1));
-assert.match(f.saved[6].name,/_1201-1300.zip$/);
-f.c.exportPart=0;await f.c.exportWithMaps();assert.match(f.saved[7].name,/_1-200.xlsx$/);
+for(let i=0;i<12;i++){f.c.exportPart=i;await f.c.exportWithMaps('zip');assert.ok(f.c.rows.filter(r=>r.mapImage).length<=200);}
+assert.equal(f.saved.length,12);
+assert.deepEqual(groups.flat(),Array.from({length:2300},(_,i)=>i+1));
+assert.match(f.saved[11].name,/_2201-2300.zip$/);
+f.c.exportPart=0;await f.c.exportWithMaps();assert.match(f.saved[12].name,/_1-200.xlsx$/);
 assert.equal(groups.at(-1).length,200);
-console.log('1300 routes exported in 7 bounded-memory parts, no omitted/duplicate IDs, previous parts can be regenerated.');
+console.log('2300 routes exported in 12 bounded-memory parts, no omitted/duplicate IDs, previous parts can be regenerated.');
+
+f=fixture(2300);await f.c.exportWithMaps('zip');
+for(let i=0;i<11;i++){assert.equal(f.saved.length,i+1);assert.equal(typeof f.saved[i].onSaved,'function');f.saved[i].onSaved();while(f.c.busy)await new Promise(r=>setTimeout(r,0));}
+assert.equal(f.saved.length,12);assert.equal(f.saved[11].onSaved,undefined);assert.equal(f.captured.length,2300);
+console.log('Saving each file automatically prepares the next part through all 12 ZIPs.');
