@@ -14,13 +14,3 @@ controller.prepare(new Blob(['new']),'새 결과.xlsx');assert.deepEqual(revoked
 platform.navigator.canShare=()=>false;controller.prepare(new Blob(['png']),'지도.png');assert.equal(shareButton.hidden,true);link.onclick();assert.match(messages.at(-1)[0],/요청/);
 controller.clear();assert.equal(panel.hidden,true);assert.equal(link.href,undefined);assert.equal(revoked.length,3);
 console.log('PASS: fresh-tap download/share (no auto navigation), file bytes/name, unsupported sharing, cancellation/error, URL replacement and cleanup.');
-
-let advanced=0;platform.navigator.canShare=()=>true;
-controller.prepare(new Blob(['part']),'part.zip',()=>advanced++);
-shareError={name:'AbortError'};await shareButton.onclick();
-await new Promise(r=>setTimeout(r,1050));assert.equal(advanced,0);
-shareError=null;await shareButton.onclick();await shareButton.onclick();
-await new Promise(r=>setTimeout(r,1050));assert.equal(advanced,1);
-controller.prepare(new Blob(['part2']),'part2.zip',()=>advanced++);
-link.onclick();await new Promise(r=>setTimeout(r,1050));assert.equal(advanced,2);
-console.log('Auto-next: cancelled shares do not advance; successful share/download advances once.');

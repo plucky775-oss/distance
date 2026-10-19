@@ -4,8 +4,6 @@ import {createDownloadController} from './download.js';
 import {AREA,clean,escapeHtml as esc,insideBox,excludedAddress,parseCSV,parseMatrix,photonPoints,parseRoute,statusLabel,exportRecords} from './core.js';
 const $=id=>document.getElementById(id);
 let config,rows=[],selectedId=null,busy=false,stopRequested=false,map,layer,pinMode=null,activeController=null,lastRequest=0,lastViewKey='',sheets=[],fileName='',tileLayer=null,capturing=false,exporting=false;
-let exportPart=0;
-const EXPORT_PART_SIZE=200;
 const searchCache=new Map(),routeCache=new Map();
 const downloads=createDownloadController({panel:$('download-ready'),link:$('download-link'),shareButton:$('share-file'),nameLabel:$('download-name'),notify});
 const emptyInspector=$('inspector').innerHTML,emptyList=$('route-list').innerHTML;
@@ -17,12 +15,6 @@ function clearRoute(r){r.mapImage=null;r.route=null;r.error='';r.status='review'
 function validateRow(r){const problems=[];for(const k of ['origin','destination']){if(!r[k].address)problems.push(k==='origin'?'출발지 주소를 입력해 주세요.':'도착지 주소를 입력해 주세요.');if(excludedAddress(r[k].address))problems.push('대부도 지역은 대상에서 제외됩니다.');}r.invalid=!!problems.length;r.error=problems.join(' ');if(r.invalid)r.status='error';return !r.invalid;}
 function setBusy(value){busy=value;if(value)cancelPin();render();}
 function renderList(){
- const parts=Math.ceil(rows.length/EXPORT_PART_SIZE);
- if(exportPart>=parts)exportPart=0;
- $('export-range-wrap').hidden=parts<=1;
- $('export-range').innerHTML=Array.from({length:parts},(_,i)=>`<option value="${i}" ${i===exportPart?'selected':''}>${i*EXPORT_PART_SIZE+1}~${Math.min((i+1)*EXPORT_PART_SIZE,rows.length)}구간 (${i+1}/${parts})</option>`).join('');
- $('export-range').disabled=busy;
-
  $('row-count').textContent=rows.length;
  $('file-line').textContent=fileName||'등록된 파일이 없습니다';
  $('route-list').innerHTML=rows.length?rows.map(r=>`<button class="route-item ${r.id===selectedId?'selected':''}" data-id="${r.id}" aria-pressed="${r.id===selectedId}"><div class="route-meta"><span class="number">${String(r.id).padStart(2,'0')} <span class="source-row">· 엑셀 ${r.sourceRow}행</span></span><span class="status ${r.status}">${statusLabel(r)}</span></div><div class="route-point"><span class="point-dot">A</span><span>${esc(r.origin.address)||'출발지 미입력'}</span></div><div class="route-point end"><span class="point-dot">B</span><span>${esc(r.destination.address)||'도착지 미입력'}</span></div>${r.route?`<div class="route-result">${km(r.route.distance)}<small>km · ${minutes(r.route.duration)}</small></div>`:''}</button>`).join(''):emptyList;
@@ -90,9 +82,9 @@ async function runBatch(){if(busy||!rows.length||!config)return;stopRequested=fa
 }
 async function searchOne(kind){const r=selected();if(!r||busy||!config)return;stopRequested=false;clearRoute(r);if(!validateRow(r)){render();return;}setBusy(true);r.status='searching';try{const found=await searchEndpoint(r,kind);r.status='review';r.error=found?'':'대상 권역 내 검색 결과가 없습니다. 주소를 간단히 바꾸거나 지도에서 직접 지정해 주세요.';}catch(e){r.status='error';r.error=e.message;}finally{setBusy(false);}}
 async function calculateSelected(){const r=selected();if(!r||busy||!config||!validateRow(r))return;stopRequested=false;r.origin.confirmed=true;r.destination.confirmed=true;setBusy(true);try{await routeRow(r);notify('도로거리 계산을 완료했습니다. 결과 엑셀 저장으로 내려받을 수 있습니다.');}catch(e){r.status='error';r.error=e.message;notify(e.message,true);}finally{setBusy(false);}if(r.route&&selectedId===r.id){try{await prepareMap(r);}catch(e){notify('거리 계산은 완료했습니다. '+e.message,true);}}}
-function loadMatrix(matrix,name){const parsed=parseMatrix(matrix,config.maxRows);rows=parsed;exportPart=0;selectedId=rows[0].id;fileName=name;cancelPin();lastViewKey='';render();notify(`${rows.length}구간을 불러왔습니다. ‘전체 위치 검색·거리 계산’을 눌러주세요.`);}
+function loadMatrix(matrix,name){const parsed=parseMatrix(matrix,config.maxRows);rows=parsed;selectedId=rows[0].id;fileName=name;cancelPin();lastViewKey='';render();notify(`${rows.length}구간을 불러왔습니다. ‘전체 위치 검색·거리 계산’을 눌러주세요.`);}
 function excelValue(cell){const v=cell.value;if(v===null||v===undefined)return '';if(typeof v==='object'){if('formula'in v||'sharedFormula'in v){if(v.result===undefined)throw new Error('결과값이 없는 수식 셀이 있습니다. 엑셀에서 계산 후 값으로 붙여넣어 주세요.');return v.result;}if(v.richText)return v.richText.map(x=>x.text).join('');if(v.text)return v.text;if(v.error)return v.error;if(v instanceof Date)return v.toISOString();}return v;}
-function sheetMatrix(sheet){if(sheet.rowCount>(config.maxRows||2300)+20)throw new Error('행이 너무 많습니다. 필요한 주소 행만 새 파일에 복사해 주세요.');if(sheet.columnCount>100)throw new Error('열이 너무 많습니다. 필요한 열만 새 파일에 복사해 주세요.');const matrix=[];sheet.eachRow({includeEmpty:true},row=>{const values=[];for(let c=1;c<=Math.min(sheet.columnCount,100);c++)values.push(excelValue(row.getCell(c)));matrix.push(values);});return matrix;}
+function sheetMatrix(sheet){if(sheet.rowCount>1020)throw new Error('행이 너무 많습니다. 필요한 주소 행만 새 파일에 복사해 주세요.');if(sheet.columnCount>100)throw new Error('열이 너무 많습니다. 필요한 열만 새 파일에 복사해 주세요.');const matrix=[];sheet.eachRow({includeEmpty:true},row=>{const values=[];for(let c=1;c<=Math.min(sheet.columnCount,100);c++)values.push(excelValue(row.getCell(c)));matrix.push(values);});return matrix;}
 async function importFile(file){if(!file||busy)return;if(!config){notify('지도 설정을 불러오는 중입니다. 잠시 뒤 다시 시도해 주세요.');return;}if(!/\.(xlsx|csv)$/i.test(file.name)){notify('XLSX 또는 CSV 파일을 선택해 주세요. XLS는 엑셀에서 XLSX로 저장해 주세요.',true);return;}if(file.size>5*1024*1024){notify('5MB 이하의 파일을 사용해 주세요. 필요한 주소 행만 새 파일에 복사하면 용량을 줄일 수 있습니다.',true);return;}
  setBusy(true);try{
    if(/\.csv$/i.test(file.name)){const buffer=await file.arrayBuffer();let text=new TextDecoder('utf-8').decode(buffer);if(text.includes('\uFFFD'))text=new TextDecoder('euc-kr').decode(buffer);loadMatrix(parseCSV(text),file.name);sheets=[];removeSheetPicker();}
@@ -104,7 +96,7 @@ function removeSheetPicker(){$('sheet-picker')?.remove();}
 function renderSheetPicker(name,initial){removeSheetPicker();if(sheets.length<2)return;const wrap=document.createElement('div');wrap.id='sheet-picker';wrap.className='sheet-picker';const label=document.createElement('label');label.htmlFor='sheet-select';label.textContent='사용할 시트';const select=document.createElement('select');select.id='sheet-select';sheets.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent=s.name;o.selected=i===initial;select.append(o);});select.addEventListener('change',()=>{try{loadMatrix(sheetMatrix(sheets[+select.value]),`${name} · ${sheets[+select.value].name}`);}catch(e){notify(e.message,true);}});wrap.append(label,select);document.querySelector('.intro').append(wrap);}
 function sample(){if(busy||!config)return;sheets=[];removeSheetPicker();loadMatrix([['출발지','도착지'],['안산시청','상록구청'],['안산시청','정왕본동 행정복지센터'],['안산시 단원구 중앙역','안산시 상록구 한양대학교 ERICA']], '예시 · 안산과 정왕 3구간');}
 async function saveWorkbook(data,name){if(!window.ExcelJS){notify('엑셀 저장 기능을 불러오지 못했습니다.',true);return;}try{const book=new ExcelJS.Workbook();book.creator='경로노트';const sheet=book.addWorksheet('이동구간');const keys=Object.keys(data[0]);sheet.columns=keys.map(k=>({header:k,key:k,width:/주소|출발지$|도착지$|확인/.test(k)?38:20}));sheet.addRows(data);sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:{row:1,column:1},to:{row:1,column:keys.length}};const header=sheet.getRow(1);header.height=28;header.eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2154D8'}};c.alignment={vertical:'middle'};});sheet.eachRow((row,i)=>{if(i>1){row.height=30;row.eachCell(c=>{c.alignment={vertical:'middle',wrapText:true};if(i%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF1F5FC'}};});}});const bytes=await book.xlsx.writeBuffer();downloadBlob(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),name);notify('엑셀 양식이 준비됐습니다. 파일 저장 버튼을 눌러 주세요.');}catch(e){notify('엑셀 저장에 실패했습니다. '+e.message,true);}}
-function downloadBlob(blob,name,onSaved){downloads.prepare(blob,name,onSaved);}
+function downloadBlob(blob,name){downloads.prepare(blob,name);}
 async function prepareMap(r){
  if(hasMapImage(r))return r.mapImage;
  if(selectedId!==r.id||!r.route)throw new Error('지도 그림을 저장할 구간을 먼저 선택해 주세요.');
@@ -117,15 +109,12 @@ async function saveSelectedMap(){const r=selected();if(busy||!r?.route)return;tr
 async function exportWithMaps(format='xlsx'){
  if(busy||!rows.length)return;
  const previousSelection=selectedId;
- const start=exportPart*EXPORT_PART_SIZE,exportRows=rows.slice(start,start+EXPORT_PART_SIZE);
- const range=rows.length>EXPORT_PART_SIZE?`_${start+1}-${start+exportRows.length}`:'';
- // Retain only this part's images so 2,300 maps never accumulate in memory.
- if(rows.length>EXPORT_PART_SIZE)for(const r of rows)if(!exportRows.includes(r))r.mapImage=null;
  exporting=true;stopRequested=false;setBusy(true);
  $('progress-wrap').hidden=false;
  try{
-   const missing=exportRows.filter(r=>r.route&&!hasMapImage(r));
-   const total=exportRows.filter(r=>r.route).length;
+   downloads.clear();
+   const missing=rows.filter(r=>r.route&&!hasMapImage(r));
+   const total=rows.filter(r=>r.route).length;
    let prepared=total-missing.length;
    const progress=()=>{$('progress').value=total?prepared/total*100:100;$('progress-label').textContent=`지도 ${prepared} / ${total}개 준비`;};
    progress();
@@ -140,28 +129,21 @@ async function exportWithMaps(format='xlsx'){
    }
    if(stopRequested){notify(`지도 준비를 중지했습니다. ${prepared}개는 유지됩니다. 저장 버튼을 누르면 이어서 진행합니다.`);return;}
    capturing=true;renderList();notify('지도 준비 완료. 저장 파일을 만드는 중입니다…');
-   const book=createResultWorkbook(ExcelJS,exportRows);const bytes=await book.xlsx.writeBuffer();
+   const book=createResultWorkbook(ExcelJS,rows);const bytes=await book.xlsx.writeBuffer();
    if(stopRequested){notify('파일 생성을 중지했습니다. 준비된 지도는 유지됩니다.');return;}
-   const date=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}),done=exportRows.filter(r=>r.route).length;
-   const sourceRows=rows,nextPart=exportPart+1;
-   const onSaved=start+exportRows.length<rows.length?()=>{
-     if(rows!==sourceRows||busy)return;
-     exportPart=nextPart;render();void exportWithMaps(format);
-   }:undefined;
-   if(format==='zip')downloadBlob(createResultPackage(exportRows,bytes),`경로노트_엑셀과지도_${date}${range}.zip`,onSaved);
-   else downloadBlob(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`경로노트_지도포함_거리결과_${date}${range}.xlsx`,onSaved);
-   notify(`${format==='zip'?'엑셀·지도 ZIP':'지도 포함 엑셀'} 준비 완료 · 지도 ${done}개, 미계산 ${exportRows.length-done}개. 아래 ‘파일 내려받기’ 또는 ‘공유·파일에 저장’을 눌러 주세요.${range?' 저장 버튼을 누르면 다음 묶음이 자동으로 준비됩니다.':''}`);
+   const date=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}),done=rows.filter(r=>r.route).length;
+   if(format==='zip')downloadBlob(createResultPackage(rows,bytes),`경로노트_엑셀과지도_${date}.zip`);
+   else downloadBlob(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`경로노트_지도포함_거리결과_${date}.xlsx`);
+   notify(`${format==='zip'?'엑셀·지도 ZIP':'지도 포함 엑셀'} 준비 완료 · 지도 ${done}개, 미계산 ${rows.length-done}개. 아래 ‘파일 내려받기’ 또는 ‘공유·파일에 저장’을 눌러 주세요.`);
  }catch(e){notify('결과 저장: '+e.message,true);}
  finally{exporting=false;capturing=false;stopRequested=false;selectedId=previousSelection;$('progress-wrap').hidden=true;setBusy(false);}
 }
 function bindEvents(){
- $('export-range').onchange=e=>{if(!busy)exportPart=Number(e.target.value);};
-
  $('upload-btn').onclick=()=>$('file-input').click();$('file-input').onchange=e=>importFile(e.target.files[0]);$('sample-btn').onclick=sample;
  $('template-btn').onclick=()=>saveWorkbook([{출발지:'안산시 단원구 화랑로 387',도착지:'안산시 상록구 석호로 110'},{출발지:'안산시 단원구 고잔동 중앙역',도착지:'시흥시 정왕동 정왕역'}],'경로노트_주소입력양식.xlsx');
  $('route-list').onclick=e=>{const item=e.target.closest('[data-id]');if(item&&!busy){selectedId=+item.dataset.id;cancelPin();render();}else if(e.target.closest('#empty-sample'))sample();};
  $('batch-btn').onclick=runBatch;$('stop-btn').onclick=()=>{stopRequested=true;activeController?.abort();$('stop-btn').disabled=true;};
- $('clear-btn').onclick=()=>{rows=[];exportPart=0;selectedId=null;fileName='';sheets=[];removeSheetPicker();cancelPin();render();notify('');};
+ $('clear-btn').onclick=()=>{rows=[];selectedId=null;fileName='';sheets=[];removeSheetPicker();cancelPin();render();notify('');};
  $('export-btn').onclick=()=>exportWithMaps('xlsx');$('zip-btn').onclick=()=>exportWithMaps('zip');
  $('fit-btn').onclick=()=>{if(!busy)drawMap(true);};$('cancel-pin').onclick=()=>{cancelPin();drawMap();};
  $('inspector').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.dataset.search)searchOne(b.dataset.search);else if(b.dataset.pin){pinMode=b.dataset.pin;$('pin-banner').hidden=false;$('pin-message').textContent=`지도를 눌러 ${pinMode==='origin'?'출발지 A':'도착지 B'} 위치를 지정하세요.`;$('map-hint').hidden=true;$('map').classList.add('pin-mode');map.doubleClickZoom.disable();}else if(b.id==='calculate-selected')calculateSelected();else if(b.id==='png-btn')saveSelectedMap();});
