@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {parseMatrix,escapeHtml} from './dist/core.js';
+import {parseMatrix,escapeHtml,coordinateSummary} from './dist/core.js';
 import {addressKey,needsLocation,pendingAddresses,matchingEndpoints,applyManualPoint} from './dist/address-review.js';
 
 assert.equal(addressKey('단원구  고잔동 518'),'안산시 단원구 고잔동 518');
@@ -58,9 +58,9 @@ assert.match(source,/shareSameAddress=e.target.checked/);
 // retries it. Failed requests are not mistaken for a successful empty result.
 const batchRows=parseMatrix([['출발지','도착지'],...Array(200).fill(['단원구 고잔동 518','시흥시 정왕동 1351'])]);
 const elements={};let requests=0;
-const c={addressKey,rows:batchRows,config:{},busy:false,stopRequested:false,notify(){},render(){},setBusy:v=>c.busy=v,$:id=>elements[id]??={},
+const c={coordinateSummary,downloads:{clear(){}},addressKey,rows:batchRows,config:{},busy:false,stopRequested:false,notify(){},render(){},setBusy:v=>c.busy=v,$:id=>elements[id]??={},
  searchEndpoint:async(r,k)=>{requests++;r[k].searched=true;return false;},routeRow:async()=>{throw Error('Unverified endpoints must not route');}};
-vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function runBatch()'),source.indexOf('async function searchOne(')),c);
+vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function runBatch('),source.indexOf('async function searchOne(')),c);
 await c.runBatch();assert.equal(requests,2);assert.equal(elements.progress.value,100);assert.ok(batchRows.every(r=>!r.route));
 await c.runBatch();assert.equal(requests,4);
 c.searchEndpoint=async()=>{throw Error('network');};await c.runBatch();assert.ok(batchRows.every(r=>r.error==='network'));
