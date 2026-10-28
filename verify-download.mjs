@@ -14,3 +14,6 @@ controller.prepare(new Blob(['new']),'새 결과.xlsx');assert.deepEqual(revoked
 platform.navigator.canShare=()=>false;controller.prepare(new Blob(['png']),'지도.png');assert.equal(shareButton.hidden,true);link.onclick();assert.match(messages.at(-1)[0],/요청/);
 controller.clear();assert.equal(panel.hidden,true);assert.equal(link.href,undefined);assert.equal(revoked.length,3);
 console.log('PASS: fresh-tap download/share (no auto navigation), file bytes/name, unsupported sharing, cancellation/error, URL replacement and cleanup.');
+
+platform.navigator.userAgent='Mozilla/5.0 (Linux; Android 14) Chrome/130';controller.prepare(new Blob(['android']),'android.zip');assert.equal(link.target,'_self');link.onclick();assert.equal(link.download,'android.zip');
+platform.navigator.userAgent='Mozilla/5.0 (iPad)';controller.prepare(new Blob(['ipad']),'ipad.zip');assert.equal(link.target,'_blank');console.log('Android same-tab download; iPad existing behavior preserved.');

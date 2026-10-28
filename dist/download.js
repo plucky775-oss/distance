@@ -7,7 +7,7 @@ export function createDownloadController({panel,link,shareButton,nameLabel,notif
    clear();
    const url=platform.URL.createObjectURL(blob);
    const file=typeof platform.File==='function'?new platform.File([blob],name,{type:blob.type}):null;
-   current={url,file,blob,name};link.href=url;link.download=name;link.target='_blank';link.rel='noopener';nameLabel.textContent=name;panel.hidden=false;
+   current={url,file,blob,name};link.href=url;link.download=name;link.target=/Android/i.test(platform.navigator?.userAgent||'')?'_self':'_blank';link.rel='noopener';nameLabel.textContent=name;panel.hidden=false;
    let canShare=false;try{canShare=!!file&&typeof platform.navigator?.share==='function'&&!!platform.navigator?.canShare?.({files:[file]});}catch{}
    shareButton.hidden=!canShare&&!platform.RouteNoteNative;shareButton.disabled=false;
    if(platform.RouteNoteNative){link.textContent='기기에 파일 저장';shareButton.textContent='다른 앱으로 공유';}
@@ -16,7 +16,7 @@ export function createDownloadController({panel,link,shareButton,nameLabel,notif
  async function nativeAction(kind){
    if(nativeBusy||!current)return;nativeBusy=true;shareButton.disabled=true;link.setAttribute?.('aria-disabled','true');
    const {blob,name}=current;
-   try{notify('파일을 준비하고 있습니다…');const result=await platform.RouteNoteNative[kind](blob,name);notify(result?.cancelled?'파일 저장을 취소했습니다.':kind==='save'?'선택한 위치에 파일을 저장했습니다.':'공유 창을 닫았습니다. 선택한 앱에서 파일을 확인해 주세요.');}
+   try{notify('파일을 준비하고 있습니다…');const result=await platform.RouteNoteNative[kind](blob,name,percent=>notify(`파일 준비 ${percent}% · 완료 후 저장·공유 창이 열립니다.`));notify(result?.cancelled?'파일 저장을 취소했습니다.':kind==='save'?'선택한 위치에 파일을 저장했습니다.':'공유 창을 닫았습니다. 선택한 앱에서 파일을 확인해 주세요.');}
    catch(e){notify('파일 처리: '+(e.message||'다시 시도해 주세요.'),true);}
    finally{nativeBusy=false;shareButton.disabled=false;link.removeAttribute('aria-disabled');}
  }
