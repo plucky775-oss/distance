@@ -1,6 +1,6 @@
 import {exportRecords,statusLabel} from './core.js';
 
-export function imageKey(row){return JSON.stringify([row.origin.address,row.destination.address,row.origin.point?.lat,row.origin.point?.lng,row.destination.point?.lat,row.destination.point?.lng,row.route?.distance,row.route?.geometry]);}
+export function imageKey(row){return JSON.stringify([row.origin.address,row.destination.address,row.origin.roadAddress,row.destination.roadAddress,row.origin.point?.lat,row.origin.point?.lng,row.destination.point?.lat,row.destination.point?.lng,row.route?.distance,row.route?.geometry]);}
 export function hasMapImage(row){return !!row.route&&row.mapImage?.key===imageKey(row)&&/^data:image\/(?:png|jpeg);base64,/.test(row.mapImage.dataUrl);}
 export function imageFormat(image){return image.dataUrl.startsWith('data:image/jpeg;')?'jpeg':'png';}
 export function mapFilename(row){return `maps/route-${String(row.id).padStart(3,'0')}.${imageFormat(row.mapImage||{dataUrl:''})==='jpeg'?'jpg':'png'}`;}
@@ -29,8 +29,8 @@ export function renderMapCard(row,view,createCanvas=(w,h)=>{const c=document.cre
  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);
  ctx.fillStyle='#2154d8';ctx.fillRect(0,0,10,header);
  ctx.font='bold 31px sans-serif';ctx.fillStyle='#14223b';ctx.fillText(`구간 ${String(row.id).padStart(2,'0')}  ·  ${(row.route.distance/1000).toFixed(2)} km`,30,44);
- ctx.font='23px sans-serif';ctx.fillStyle='#2154d8';ctx.fillText(ellipsis(ctx,'A  '+row.origin.address,1140),30,89);
- ctx.fillStyle='#bf501c';ctx.fillText(ellipsis(ctx,'B  '+row.destination.address,1140),30,128);
+ ctx.font='23px sans-serif';ctx.fillStyle='#2154d8';ctx.fillText(ellipsis(ctx,'A  '+(row.origin.roadAddress||row.origin.address),1140),30,89);
+ ctx.fillStyle='#bf501c';ctx.fillText(ellipsis(ctx,'B  '+(row.destination.roadAddress||row.destination.address),1140),30,128);
  ctx.save();ctx.beginPath();ctx.rect(0,header,width,mapHeight);ctx.clip();ctx.translate(0,header);ctx.scale(scale,scale);
  ctx.fillStyle='#e9edf1';ctx.fillRect(0,0,view.width,view.height);
  for(const tile of view.tiles)ctx.drawImage(tile.image,tile.x,tile.y,tile.width,tile.height);
@@ -73,8 +73,8 @@ export function createResultWorkbook(ExcelJS,rows){
  if(!rows.length)throw new Error('저장할 이동 구간이 없습니다.');
  const missing=rows.filter(r=>r.route&&!hasMapImage(r));if(missing.length)throw new Error(`${missing.length}개 구간의 지도 그림이 아직 준비되지 않았습니다.`);
  const book=new ExcelJS.Workbook();book.creator='경로노트';book.created=new Date();
- const report=book.addWorksheet('거리·경로지도');report.columns=[{header:'번호',key:'id',width:8},{header:'출발지',key:'origin',width:32},{header:'도착지',key:'destination',width:32},{header:'도로거리(km)',key:'km',width:16},{header:'상태',key:'status',width:17},{header:'경로 지도 (A 출발 · B 도착)',key:'map',width:88}];
- for(const r of rows){const row=report.addRow({id:r.id,origin:r.origin.address,destination:r.destination.address,km:r.route?r.route.distance/1000:'',status:statusLabel(r),map:r.route?`지도 그림이 안 보이면 Excel 앱에서 열어 주세요.\nZIP 저장 시 별도 그림: ${mapFilename(r)}`:(r.error||'거리 계산 후 지도가 포함됩니다.')});row.height=r.route?320:62;row.getCell(4).numFmt='0.00';row.eachCell({includeEmpty:true},c=>{c.alignment={vertical:'middle',wrapText:true};c.font={size:11};c.border={bottom:{style:'thin',color:{argb:'FFDDE5F0'}}};if(row.number%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8FD'}};});
+ const report=book.addWorksheet('거리·경로지도');report.columns=[{header:'번호',key:'id',width:8},{header:'출발지(새주소)',key:'origin',width:32},{header:'도착지(새주소)',key:'destination',width:32},{header:'도로거리(km)',key:'km',width:16},{header:'상태',key:'status',width:17},{header:'경로 지도 (A 출발 · B 도착)',key:'map',width:88}];
+ for(const r of rows){const row=report.addRow({id:r.id,origin:r.origin.roadAddress||r.origin.address,destination:r.destination.roadAddress||r.destination.address,km:r.route?r.route.distance/1000:'',status:statusLabel(r),map:r.route?`지도 그림이 안 보이면 Excel 앱에서 열어 주세요.\nZIP 저장 시 별도 그림: ${mapFilename(r)}`:(r.error||'거리 계산 후 지도가 포함됩니다.')});row.height=r.route?320:62;row.getCell(4).numFmt='0.00';row.eachCell({includeEmpty:true},c=>{c.alignment={vertical:'middle',wrapText:true};c.font={size:11};c.border={bottom:{style:'thin',color:{argb:'FFDDE5F0'}}};if(row.number%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8FD'}};});
    if(r.route){const image=r.mapImage;const factor=Math.min(600/image.width,350/image.height);const width=image.width*factor,height=image.height*factor;const id=book.addImage({base64:image.dataUrl,extension:imageFormat(image)});
      // Explicit two-cell anchors (EMU offsets at 96 dpi) preserve image size
      // without relying on a viewer to infer the bottom-right from an extent.
@@ -86,3 +86,4 @@ export function createResultWorkbook(ExcelJS,rows){
  const details=book.addWorksheet('상세결과');const data=exportRecords(rows);const keys=Object.keys(data[0]);details.columns=keys.map(k=>({header:k,key:k,width:/주소|출발지$|도착지$|확인/.test(k)?38:23}));details.addRows(data);styleSheet(details);details.eachRow((r,i)=>{if(i>1){r.height=35;r.eachCell(c=>c.alignment={vertical:'middle',wrapText:true});}});
  return book;
 }
+

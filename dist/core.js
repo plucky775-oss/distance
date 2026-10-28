@@ -102,8 +102,8 @@ export function parseRoute(data){
   if(!Number.isFinite(route.distance)||route.distance<0||!Number.isFinite(route.duration)||route.duration<0||route.geometry?.type!=='LineString'||!Array.isArray(route.geometry.coordinates)||route.geometry.coordinates.length<2||!route.geometry.coordinates.every(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])))throw new Error('경로 서버 응답이 올바르지 않습니다. 다시 시도해 주세요.');
   return {distance:route.distance,duration:route.duration,geometry:route.geometry,snaps:(data.waypoints||[]).map(w=>({distance:w.distance,location:w.location})),calculatedAt:new Date().toISOString()};
 }
-export const statusLabel = row => row.status==='done'&&(!row.origin.confirmed||!row.destination.confirmed)?'자동 계산 · 위치 확인':({pending:'변환 대기',searching:'좌표 변환 중',located:'좌표 변환 완료',review:'위치 확인',routing:'계산 중',done:'계산 완료',error:'확인 필요'}[row.status]||'대기');
-export const coordinateStatus = endpoint => endpoint.point?(endpoint.confirmed?'위치 확인됨':'좌표 변환 완료 · 위치 확인 필요'):(endpoint.searched?'변환 실패 · 지도에서 지정':'미변환');
+export const statusLabel = row => row.status==='done'&&(!row.origin.confirmed||!row.destination.confirmed)?'자동 계산 · 위치 확인':({pending:'검색 대기',searching:'새주소 검색 중',located:'주소 검색 완료',review:'위치 확인',routing:'계산 중',done:'계산 완료',error:'확인 필요'}[row.status]||'대기');
+export const coordinateStatus = endpoint => endpoint.point?(endpoint.confirmed?'위치 확인됨':'검색 완료 · 위치 확인 필요'):(endpoint.searched?'검색 실패 · 지도에서 지정':'검색 대기');
 export function coordinateSummary(rows){
  const endpoints=rows.flatMap(r=>[r.origin,r.destination]);
  return {total:endpoints.length,located:endpoints.filter(e=>e.point).length,failed:endpoints.filter(e=>e.searched&&!e.point).length};
@@ -119,17 +119,16 @@ export function mapPointGroups(rows){
  return [...groups.values()];
 }
 export function exportRecords(rows){return rows.map(r=>({
-  원본행:r.sourceRow,출발지:r.origin.address,도착지:r.destination.address,
-  출발검색주소:r.origin.point?.label||'',도착검색주소:r.destination.point?.label||'',
-  출발위도:r.origin.point?.lat??'',출발경도:r.origin.point?.lng??'',도착위도:r.destination.point?.lat??'',도착경도:r.destination.point?.lng??'',
-  '편도도로거리(km)':r.route?Math.round(r.route.distance/10)/100:'',
-  '예상시간(분·교통미반영)':r.route?Math.round(r.route.duration/6)/10:'',
-  '출발지-도로간거리(m)':r.route?.snaps[0]?.distance!==undefined?Math.round(r.route.snaps[0].distance):'',
-  '도착지-도로간거리(m)':r.route?.snaps[1]?.distance!==undefined?Math.round(r.route.snaps[1].distance):'',
-  상태:statusLabel(r),확인사항:r.error||'',계산시각:r.route?.calculatedAt||'',경로출처:r.route?'OSRM / OpenStreetMap':'',
-  번호:r.id,출발위치상태:coordinateStatus(r.origin),도착위치상태:coordinateStatus(r.destination),
-  출발좌표출처:r.origin.point?.source||'',도착좌표출처:r.destination.point?.source||'',
+  번호:r.id,출발지:r.origin.address,도착지:r.destination.address,
   출발도로명주소:r.origin.roadAddress||'',도착도로명주소:r.destination.roadAddress||'',
-  출발도로명변환상태:r.origin.roadStatus||'',도착도로명변환상태:r.destination.roadStatus||''
+  '편도도로거리(km)':r.route?Math.round(r.route.distance/10)/100:'',
+  상태:statusLabel(r),확인사항:r.error||'',
+  출발검색주소:r.origin.point?.label||'',도착검색주소:r.destination.point?.label||'',
+  출발위치상태:coordinateStatus(r.origin),도착위치상태:coordinateStatus(r.destination),
+  출발도로명변환상태:r.origin.roadStatus||'',도착도로명변환상태:r.destination.roadStatus||'',
+  '예상시간(분·교통미반영)':r.route?Math.round(r.route.duration/6)/10:'',
+  '출발지-도로간거리(m)':r.route?.snaps?.[0]?.distance!==undefined?Math.round(r.route.snaps[0].distance):'',
+  '도착지-도로간거리(m)':r.route?.snaps?.[1]?.distance!==undefined?Math.round(r.route.snaps[1].distance):'',
+  원본행:r.sourceRow,계산시각:r.route?.calculatedAt||'',경로출처:r.route?'OSRM / OpenStreetMap':''
 }));}
 

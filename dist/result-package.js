@@ -41,7 +41,7 @@ export function mapImageBytes(row){
 
 export function createMapReport(rows){
  const done=rows.filter(r=>r.route).length;
- const cards=rows.map(r=>`<article><h2>구간 ${escapeHtml(String(r.id))} · ${escapeHtml(statusLabel(r))}${r.route?` · ${(r.route.distance/1000).toFixed(2)} km`:''}</h2><p>A 출발: ${escapeHtml(r.origin.address)}<br>B 도착: ${escapeHtml(r.destination.address)}</p>${r.route?`<img src="${mapFilename(r)}" alt="구간 ${r.id} 경로 지도"><p><a href="${mapFilename(r)}" download>지도 이미지 열기·저장</a></p>`:`<p class="pending">${escapeHtml(r.error||'거리 계산 전입니다. 앱에서 위치 확인 후 다시 계산해 주세요.')}</p>`}</article>`).join('');
+ const cards=rows.map(r=>`<article><h2>구간 ${escapeHtml(String(r.id))} · ${escapeHtml(statusLabel(r))}${r.route?` · ${(r.route.distance/1000).toFixed(2)} km`:''}</h2><p>A 출발: ${escapeHtml(r.origin.roadAddress||r.origin.address)}<br>B 도착: ${escapeHtml(r.destination.roadAddress||r.destination.address)}</p>${r.route?`<img src="${mapFilename(r)}" alt="구간 ${r.id} 경로 지도"><p><a href="${mapFilename(r)}" download>지도 이미지 열기·저장</a></p>`:`<p class="pending">${escapeHtml(r.error||'거리 계산 전입니다. 앱에서 위치 확인 후 다시 계산해 주세요.')}</p>`}</article>`).join('');
  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>경로노트 · 거리와 경로 지도</title><style>body{font-family:system-ui,sans-serif;margin:24px auto;padding:0 18px;max-width:1000px;color:#14223b;line-height:1.7}article{border:1px solid #d6deec;padding:18px;margin:20px 0;break-inside:avoid}h1{font-size:26px}h2{font-size:20px}img{display:block;max-width:100%;height:auto}a{color:#2154d8}.pending{color:#975b16}@media print{article{page-break-inside:avoid}}</style></head><body><h1>거리와 경로 지도</h1><p>전체 ${rows.length}구간 · 계산 완료 ${done}구간 · 미계산 ${rows.length-done}구간</p><p>자동차 편도 도로거리 · 실시간 교통 미반영<br>지도: © OpenStreetMap contributors · 경로: OSRM</p><p><a href="results.xlsx" download>지도 포함 결과 엑셀</a></p>${cards}</body></html>`;
 }
 
@@ -52,3 +52,4 @@ export function createResultPackage(rows,workbookBytes){
  for(const r of done)files.push({name:mapFilename(r),data:mapImageBytes(r)});
  return createZip(files);
 }
+

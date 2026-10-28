@@ -75,7 +75,7 @@ const c={resolveRoadAddress,normalizeAddress,excludedAddress,photonPoints,parseR
  assert.equal(new URL(url).searchParams.get('q'),road);return {features:[{properties:{city:'안산시',district:'단원구',street:'시험로',housenumber:'10',type:'house'},geometry:{coordinates:[126.83,37.32]}}]};}
 };
 vm.createContext(c);vm.runInContext(part('async function searchEndpoint','async function searchOne'),c);
-await c.runBatch(false);assert.equal(calls.length,2);assert.equal(c.rows[0].origin.roadAddress,road);assert.equal(c.rows[0].destination.roadAddress,road);assert.ok(c.rows[0].origin.point);assert.equal(c.rows[0].origin.address,parcel);
+await c.runBatch();assert.equal(calls.length,3);assert.equal(c.rows[0].route.distance,10);assert.equal(c.rows[0].origin.roadAddress,road);assert.equal(c.rows[0].destination.roadAddress,road);assert.ok(c.rows[0].origin.point);assert.equal(c.rows[0].origin.address,parcel);
 await c.runBatch();assert.equal(c.rows[0].route.distance,10);
 const records=exportRecords(c.rows);assert.equal(records[0].출발지,parcel);assert.equal(records[0].출발도로명주소,road);
 const ExcelJS=createRequire(import.meta.url)('./dist/vendor/exceljs.min.js'),book=new ExcelJS.Workbook(),sheet=book.addWorksheet('주소');
@@ -83,8 +83,8 @@ sheet.addRows([Object.keys(records[0]),...records.map(r=>Object.values(r))]);con
 const matrix=[];read.worksheets[0].eachRow(row=>matrix.push(row.values.slice(1)));assert.equal(parseMatrix(matrix)[0].origin.roadAddress,road);
 c.rows=parseMatrix([['출발지','도착지'],[parcel,parcel]]);c.roadCache.clear();let tries=0;
 c.requestJSON=async()=>{tries++;throw Object.assign(Error('JUSO_API_KEY 설정 확인'),{stopBatch:true});};
-await c.runBatch(false);assert.equal(tries,1);assert.equal(c.rows[0].status,'error');assert.match(notices.at(-1)[0],/JUSO_API_KEY/);assert.equal(c.busy,false);assert.equal(c.stopRequested,false);
-c.requestJSON=async()=>({candidates:two});await c.runBatch(false);assert.equal(c.rows[0].origin.point,null);assert.match(c.rows[0].origin.roadStatus,/선택 필요/);assert.equal(c.rows[0].route,null);
+await c.runBatch();assert.equal(tries,1);assert.equal(c.rows[0].status,'error');assert.match(notices.at(-1)[0],/JUSO_API_KEY/);assert.equal(c.busy,false);assert.equal(c.stopRequested,false);
+c.requestJSON=async()=>({candidates:two});await c.runBatch();assert.equal(c.rows[0].origin.point,null);assert.match(c.rows[0].origin.roadStatus,/선택 필요/);assert.equal(c.rows[0].route,null);
 assert.ok(!fs.readFileSync('dist/config.json','utf8').includes('JUSO_API_KEY'));
 assert.match(source,/data-road-candidate/);
 console.log('Road addresses: exact parcel/region/mountain matching, no fuzzy fallback, ambiguity choice, cache, server key isolation/CORS/errors, frontend conversion before Photon/routing, fatal stop, original + road XLSX round trip passed.');

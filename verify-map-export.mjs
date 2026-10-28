@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createRequire} from 'node:module';
 import {parseMatrix,parseRoute} from './dist/core.js';
-import {renderMapCard,hasMapImage,createResultWorkbook,captureVisibleMap} from './dist/route-export.js';
+import {renderMapCard,hasMapImage,createResultWorkbook,captureVisibleMap,imageKey} from './dist/route-export.js';
 const require=createRequire(import.meta.url);
 const {createCanvas,GlobalFonts}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES?process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/@napi-rs/canvas':'@napi-rs/canvas');
 if(process.env.ROUTE_TEST_FONT)GlobalFonts.registerFromPath(process.env.ROUTE_TEST_FONT,'sans-serif');
@@ -21,3 +21,16 @@ await assert.rejects(captureVisibleMap(r,null,null,()=>false),/구간이 바뀌�
 fs.writeFileSync(path.join(os.tmpdir(),'route-note-map-export-test.jpg'),Buffer.from(image.dataUrl.split(',')[1],'base64'));
 fs.writeFileSync(path.join(os.tmpdir(),'route-note-map-export-test.xlsx'),Buffer.from(bytes));
 console.log('PASS: map card JPEG rendering, portrait rendering, embedded JPEG XLSX round-trip, row anchors, failed-row handling, stale-image rejection, canceled capture.');
+
+
+r.origin.roadAddress='경기도 안산시 단원구 시험로 10';r.destination.roadAddress='경기도 시흥시 시험로 20';
+assert.equal(hasMapImage(r),false,'Changing displayed road address invalidates the image');
+r.mapImage={...image,key:imageKey(r)};
+const roadBook=createResultWorkbook(ExcelJS,rows);
+assert.equal(roadBook.worksheets[0].getCell('B2').value,r.origin.roadAddress);
+assert.equal(roadBook.worksheets[0].getCell('C2').value,r.destination.roadAddress);
+const details=roadBook.worksheets[1],roadHeaders=details.getRow(1).values;
+assert.equal(details.getCell('B2').value,'안산시청');
+assert.ok(roadHeaders.every(h=>!/위도|경도|좌표/.test(h)));
+console.log('Road addresses in map workbook; originals retained in details; no coordinate export fields passed.');
+
