@@ -13,5 +13,18 @@
 /* Large touch targets for manual endpoints on tablets and phones. */
 .point-editor .edit-actions{flex-wrap:wrap;gap:8px}
 .point-editor [data-pin]{min-height:44px;padding:10px 12px;border:1px solid #c8d7f4;border-radius:7px;background:#edf3ff;color:#2154d8;font-size:13px;font-weight:600;touch-action:manipulation}
+.address-review{margin:0 18px 16px;padding:12px;border:1px solid #d9e4f5;background:#f5f8ff;border-radius:8px;font-size:12px;line-height:1.6}
+.address-review strong{display:block;color:#2454ad;font-size:13px}
+.review-actions{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}
+.review-actions button{flex:1;font-size:12px;padding:8px;min-height:44px}
+.address-review summary{cursor:pointer;padding:8px 0;font-weight:600}
+.address-review p{color:#61718b;margin:8px 0 0}
+#pending-addresses{max-height:230px;overflow-y:auto}
+.pending-address{display:flex;flex-direction:column;width:100%;text-align:left;border:1px solid #dae3f1;border-radius:5px;background:#fff;padding:10px;margin-bottom:6px;min-height:48px;color:#203955;overflow-wrap:anywhere}
+.pending-address small{color:#687a91;margin-top:3px}
+.point-editor label.share-address{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;line-height:1.6;min-height:44px;color:#435e82}
+.point-editor .share-address input{width:18px;height:18px;flex:none;margin:0;accent-color:#2154d8}
+.review-next-action{margin-top:12px;font-size:13px;min-height:44px;width:100%}
 .pin-banner{pointer-events:none}
 .pin-banner button{pointer-events:auto;min-height:44px;min-width:44px}
+

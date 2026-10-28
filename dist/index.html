@@ -33,6 +33,12 @@
         <div class="file-line" id="file-line">등록된 파일이 없습니다</div>
         <div class="list-actions"><button id="batch-btn" class="dark" disabled>전체 위치 검색·거리 계산</button><button id="stop-btn" class="secondary" hidden>중지</button></div>
         <div class="progress-wrap" id="progress-wrap" hidden><progress id="progress" max="100" value="0"></progress><span id="progress-label"></span></div>
+        <section id="address-review" class="address-review" aria-label="미확인 주소 모아 보기" hidden>
+          <strong id="review-count"></strong>
+          <div class="review-actions"><button id="review-toggle" class="secondary" aria-pressed="false">위치 미확인만 보기</button><button id="next-review" class="secondary">다음 미확인 주소</button></div>
+          <details><summary>주소별 확인 목록</summary><div id="pending-addresses"></div></details>
+          <p>지도에서 한 번 지정하면 같은 주소에 함께 적용됩니다. 다른 번지와 별도로 확인된 위치는 덮어쓰지 않습니다.</p>
+        </section>
         <div id="route-list" class="route-list"><div class="empty-state"><div class="empty-icon" aria-hidden="true">＋</div><h3>첫 이동 구간을 추가하세요</h3><p>주소가 있는 엑셀을 불러오거나<br>예시로 사용 방법을 확인하세요.</p><button class="secondary" id="empty-sample">예시로 시작</button></div></div>
         <div class="panel-bottom"><div><small>계산 완료 <span id="done-count">0</span>구간</small><div class="total"><span id="total-km">—</span><span>km</span></div></div><div class="result-buttons"><button id="export-btn" class="secondary" disabled>지도 포함 엑셀 저장</button><button id="zip-btn" class="dark" disabled>엑셀·지도 ZIP 저장</button></div><p class="export-help">iPad에서 그림이 안 보이면 ZIP으로 저장하세요. 계산 완료된 구간의 지도가 포함됩니다.</p></div>
       </aside>
@@ -46,3 +52,4 @@
   <noscript>이 앱을 사용하려면 JavaScript를 활성화해 주세요.</noscript>
 </body>
 </html>
+

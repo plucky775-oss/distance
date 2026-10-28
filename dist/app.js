@@ -2,22 +2,26 @@ import {imageKey,hasMapImage,captureVisibleMap,createResultWorkbook,imageFormat}
 import {createResultPackage} from './result-package.js';
 import {createDownloadController} from './download.js';
 import {AREA,clean,escapeHtml as esc,insideBox,excludedAddress,parseCSV,parseMatrix,normalizeAddress,photonPoints,parseRoute,statusLabel,exportRecords} from './core.js';
+import {addressKey,needsLocation,pendingAddresses,matchingEndpoints,applyManualPoint} from './address-review.js';
 const $=id=>document.getElementById(id);
 let config,rows=[],selectedId=null,busy=false,stopRequested=false,map,layer,pinMode=null,activeController=null,lastRequest=0,lastViewKey='',sheets=[],fileName='',tileLayer=null,capturing=false,exporting=false;
 const searchCache=new Map(),routeCache=new Map();
+let reviewOnly=false,reviewFocusKey='',shareSameAddress=true;
 const downloads=createDownloadController({panel:$('download-ready'),link:$('download-link'),shareButton:$('share-file'),nameLabel:$('download-name'),notify});
 const emptyInspector=$('inspector').innerHTML,emptyList=$('route-list').innerHTML;
 function notify(message,error=false){$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').hidden=!message;}
 function selected(){return rows.find(r=>r.id===selectedId);}
 function km(m){return (m/1000).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:2});}
 function minutes(s){const m=Math.max(1,Math.round(s/60));return m>=60?`${Math.floor(m/60)}시간 ${m%60}분`:`${m}분`;}
-function clearRoute(r){r.mapImage=null;r.route=null;r.error='';r.status='review';}
+function clearRoute(r){r.mapImage=null;r.route=null;r.error='';r.status='review';downloads.clear();}
 function validateRow(r){const problems=[];for(const k of ['origin','destination']){if(!r[k].address)problems.push(k==='origin'?'출발지 주소를 입력해 주세요.':'도착지 주소를 입력해 주세요.');if(excludedAddress(r[k].address))problems.push('대부도 지역은 대상에서 제외됩니다.');}r.invalid=!!problems.length;r.error=problems.join(' ');if(r.invalid)r.status='error';return !r.invalid;}
 function setBusy(value){busy=value;if(value)cancelPin();render();}
 function renderList(){
  $('row-count').textContent=rows.length;
  $('file-line').textContent=fileName||'등록된 파일이 없습니다';
- $('route-list').innerHTML=rows.length?rows.map(r=>`<button class="route-item ${r.id===selectedId?'selected':''}" data-id="${r.id}" aria-pressed="${r.id===selectedId}"><div class="route-meta"><span class="number">${String(r.id).padStart(2,'0')} <span class="source-row">· 엑셀 ${r.sourceRow}행</span></span><span class="status ${r.status}">${statusLabel(r)}</span></div><div class="route-point"><span class="point-dot">A</span><span>${esc(r.origin.address)||'출발지 미입력'}</span></div><div class="route-point end"><span class="point-dot">B</span><span>${esc(r.destination.address)||'도착지 미입력'}</span></div>${r.route?`<div class="route-result">${km(r.route.distance)}<small>km · ${minutes(r.route.duration)}</small></div>`:''}</button>`).join(''):emptyList;
+ const visibleRows=reviewOnly?rows.filter(r=>needsLocation(r.origin)||needsLocation(r.destination)||r.invalid):rows;
+ $('route-list').innerHTML=rows.length?(visibleRows.map(r=>`<button class="route-item ${r.id===selectedId?'selected':''}" data-id="${r.id}" aria-pressed="${r.id===selectedId}"><div class="route-meta"><span class="number">${String(r.id).padStart(2,'0')} <span class="source-row">· 엑셀 ${r.sourceRow}행</span></span><span class="status ${r.status}">${statusLabel(r)}</span></div><div class="route-point"><span class="point-dot">A</span><span>${esc(r.origin.address)||'출발지 미입력'}</span></div><div class="route-point end"><span class="point-dot">B</span><span>${esc(r.destination.address)||'도착지 미입력'}</span></div>${r.route?`<div class="route-result">${km(r.route.distance)}<small>km · ${minutes(r.route.duration)}</small></div>`:''}</button>`).join('')||'<div class="empty-state"><h3>위치 확인을 마쳤습니다</h3><p>전체 위치 검색·거리 계산을 눌러<br>아직 계산하지 않은 구간을 처리하세요.</p></div>'):emptyList;
+ renderAddressReview();
  const done=rows.filter(r=>r.route);
  $('done-count').textContent=done.length;$('total-km').textContent=done.length?km(done.reduce((a,r)=>a+r.route.distance,0)):'—';
  $('batch-btn').disabled=busy||!rows.length||!config;
@@ -25,13 +29,37 @@ function renderList(){
  for(const id of ['upload-btn','sample-btn','empty-sample','sheet-select'])if($(id))$(id).disabled=busy;
  $('stop-btn').hidden=!busy||(capturing&&!exporting);$('stop-btn').disabled=stopRequested;
 }
+function renderAddressReview(){
+ const groups=pendingAddresses(rows);
+ $('address-review').hidden=!rows.length;
+ $('review-count').textContent=`위치 미확인 ${groups.length}개 주소 · ${groups.reduce((n,g)=>n+g.refs.length,0)}곳`;
+ $('review-toggle').textContent=reviewOnly?'전체 구간 보기':'위치 미확인만 보기';
+ $('review-toggle').setAttribute('aria-pressed',String(reviewOnly));$('review-toggle').disabled=busy;
+ $('next-review').disabled=busy||!groups.length;
+ $('pending-addresses').innerHTML=groups.map((g,i)=>`<button class="pending-address" data-review="${i}" ${busy?'disabled':''}><span>${esc(g.address)||'주소 미입력 · 지도에서 지정'}</span><small>${g.refs.length}곳 · ${g.refs.some(ref=>ref.missing)?'위치 지정 필요':'검색 위치 확인 필요'}</small></button>`).join('')||'<p class="review-empty">확인할 주소가 없습니다.</p>';
+}
+function selectPendingAddress(index){
+ if(busy)return;
+ const group=pendingAddresses(rows)[index];if(!group)return;
+ const ref=group.refs.find(x=>x.missing)||group.refs[0];
+ selectedId=ref.id;reviewFocusKey=group.key;cancelPin();render();
+ if(ref.missing)beginPin(ref.kind);
+ else{$('inspector').scrollIntoView?.({block:'nearest',behavior:'smooth'});notify('검색으로 찾은 핀 위치를 확인하세요. 맞으면 ‘위치 확인·거리 계산’, 다르면 ‘지도에서 지정’을 눌러 주세요.');}
+}
+function nextPendingAddress(){
+ const groups=pendingAddresses(rows);if(!groups.length||busy)return;
+ const current=groups.findIndex(g=>g.key===reviewFocusKey);
+ selectPendingAddress((current+1)%groups.length);
+}
 function endpointEditor(r,k,label){const e=r[k];const point=e.point;
  const opts=(e.candidates.length&&!point?'<option value="-1" selected>위치 확인 후 후보 선택 또는 지도에서 지정</option>':'')+e.candidates.map((p,i)=>`<option value="${i}" ${p.requiresMapSelection?'disabled':''} ${point&&point.lng===p.lng&&point.lat===p.lat?'selected':''}>${esc(p.label)}${p.matchNote?' ['+esc(p.matchNote)+']':''}${p.kind==='bus_stop'?' [버스정류장]':''}</option>`).join('');
- return `<div class="point-editor"><label for="${k}-address">${label}</label><input id="${k}-address" data-address="${k}" value="${esc(e.address)}" maxlength="250" ${busy?'disabled':''} aria-label="${label} 주소"><div class="edit-actions"><button data-search="${k}" class="text-button" ${busy?'disabled':''}>주소 찾기</button><button data-pin="${k}" class="text-button" ${busy?'disabled':''}>지도에서 ${k==='origin'?'출발지':'도착지'} 지정</button></div>${opts?`<select data-candidate="${k}" aria-label="${label} 검색 결과" ${busy?'disabled':''}>${point?.source==='지도 지정'?'<option value="-1" selected>지도에서 지정한 위치</option>':''}${opts}</select>`:''}<div class="coordinate">${point?`${point.source==='지도 지정'?'지도에서 직접 지정 · ':''}${esc(point.label)}<br>${point.lat.toFixed(6)}, ${point.lng.toFixed(6)} · ${e.confirmed?'위치 확인됨':'위치 확인 필요'}`:e.searched?'정확한 주소가 확인되지 않았습니다. 후보를 확인하거나 지도에서 직접 찍어 주세요.':'주소를 검색하거나 지도에서 지정하세요.'}</div></div>`;
+ const matches=matchingEndpoints(rows,e.address).length;
+ return `<div class="point-editor"><label for="${k}-address">${label}</label><input id="${k}-address" data-address="${k}" value="${esc(e.address)}" maxlength="250" ${busy?'disabled':''} aria-label="${label} 주소"><div class="edit-actions"><button data-search="${k}" class="text-button" ${busy?'disabled':''}>주소 찾기</button><button data-pin="${k}" class="text-button" ${busy?'disabled':''}>지도에서 ${k==='origin'?'출발지':'도착지'} 지정</button></div>${matches>1?`<label class="share-address"><input type="checkbox" data-share-address ${shareSameAddress?'checked':''} ${busy?'disabled':''}>지도 지정 시 같은 주소 ${matches}곳에 적용</label>`:''}${opts?`<select data-candidate="${k}" aria-label="${label} 검색 결과" ${busy?'disabled':''}>${point?.source==='지도 지정'?'<option value="-1" selected>지도에서 지정한 위치</option>':''}${opts}</select>`:''}<div class="coordinate">${point?`${point.source==='지도 지정'?'지도에서 직접 지정 · ':''}${esc(point.label)}<br>${point.lat.toFixed(6)}, ${point.lng.toFixed(6)} · ${e.confirmed?'위치 확인됨':'위치 확인 필요'}`:e.searched?'정확한 주소가 확인되지 않았습니다. 후보를 확인하거나 지도에서 직접 찍어 주세요.':'주소를 검색하거나 지도에서 지정하세요.'}</div></div>`;
 }
 function renderInspector(){const r=selected();if(!r){$('inspector').innerHTML=emptyInspector;return;}
  const pointsReady=!!(r.origin.point&&r.destination.point);
  $('inspector').innerHTML=`<div class="inspector-header"><div><span class="eyebrow">ROUTE ${String(r.id).padStart(2,'0')}</span><h3>${r.route?'도로 경로를 계산했습니다':'출발·도착 위치를 확인하세요'}</h3></div>${r.route?`<div class="route-measure">${km(r.route.distance)} <small>km</small></div>`:''}</div><div class="point-editors">${endpointEditor(r,'origin','A 출발지')}${endpointEditor(r,'destination','B 도착지')}</div>${r.error?`<div class="row-error" role="status">${esc(r.error)}</div>`:''}${r.route?`<div class="snap-note">예상 ${minutes(r.route.duration)} · 실시간 교통 미반영 · 지점에서 도로까지: 출발 ${Math.round(r.route.snaps[0]?.distance||0)}m / 도착 ${Math.round(r.route.snaps[1]?.distance||0)}m (합계 제외)</div>`:''}<div class="inspector-actions"><p>${r.route?'지점을 옮기면 기존 계산 결과가 지워집니다. 다시 계산해 주세요.':'지도 핀의 위치와 대상 권역을 확인해 주세요. 핀을 끌어서 옮길 수도 있습니다.'}</p><button id="calculate-selected" class="primary" ${busy||!pointsReady||r.invalid?'disabled':''}>${r.route?'경로 다시 계산':'위치 확인·거리 계산'}</button></div>${r.route?`<div class="map-export-actions"><span>${hasMapImage(r)?'✓ 엑셀에 넣을 지도 준비됨':'엑셀에 넣을 지도 그림을 저장할 수 있습니다.'}</span><button id="png-btn" class="secondary" ${busy?'disabled':''}>경로 지도 JPG 저장</button></div>`:''}`;
+ if(pendingAddresses(rows).length)$('inspector').insertAdjacentHTML('beforeend',`<button id="inspector-next" class="secondary review-next-action" ${busy?'disabled':''}>다음 미확인 주소로 이동</button>`);
 }
 function render(){renderList();renderInspector();drawMap();}
 function icon(kind){return L.divIcon({className:'custom-pin',html:`<div class="pin-body ${kind==='destination'?'end':''}"><span>${kind==='origin'?'A':'B'}</span></div>`,iconSize:[32,40],iconAnchor:[16,39]});}
@@ -55,12 +83,12 @@ function beginPin(kind){
 function cancelPin(){pinMode=null;$('pin-banner').hidden=true;$('map').classList.remove('pin-mode');if(map)map.doubleClickZoom.enable();}
 function setPoint(kind,latlng){const r=selected();if(!r||busy||!['origin','destination'].includes(kind))return;
  if(!insideBox(latlng.lng,latlng.lat)){notify('안산 본토와 정왕동을 포함하는 지도 범위 안에서 지점을 선택해 주세요. 대부도는 제외됩니다.',true);drawMap(true);return;}
- const e=r[kind];
- if(!clean(e.address))e.address=kind==='origin'?'지도에서 지정한 출발지':'지도에서 지정한 도착지';
- e.point={lat:latlng.lat,lng:latlng.lng,label:e.address,source:'지도 지정'};
- e.confirmed=true;e.searched=true;clearRoute(r);validateRow(r);cancelPin();render();
+ const result=applyManualPoint(rows,r.id,kind,latlng,{share:shareSameAddress});
+ result.changed.forEach(validateRow);downloads.clear();cancelPin();render();
  const ready=r.origin.point&&r.destination.point&&!r.invalid;
- notify(ready?'위치를 지정했습니다. A·B 핀이 맞으면 ‘위치 확인·거리 계산’을 눌러주세요.':'위치를 지정했습니다. 나머지 지점도 검색하거나 지도에서 지정해 주세요.');
+ const shared=result.applied>1?`같은 주소 ${result.applied}곳에 위치를 적용했습니다. 변경된 구간은 다시 계산해야 합니다. `:'위치를 지정했습니다. ';
+ const protectedNote=result.protectedCount?`별도로 확인된 ${result.protectedCount}곳은 변경하지 않았습니다. `:'';
+ notify(shared+protectedNote+(ready?'A·B 핀이 맞으면 ‘위치 확인·거리 계산’을 눌러주세요. 전체 구간은 ‘전체 위치 검색·거리 계산’으로 계산할 수 있습니다.':'‘다음 미확인 주소’를 누르거나 나머지 지점도 지정해 주세요.'));
  if(ready)$('calculate-selected')?.scrollIntoView?.({block:'nearest',behavior:'smooth'});
 }
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -87,10 +115,19 @@ async function routeRow(r){const a=r.origin.point,b=r.destination.point;if(!a||!
 }
 async function runBatch(){if(busy||!rows.length||!config)return;stopRequested=false;notify('전체 구간의 주소 검색과 거리 계산을 순서대로 진행합니다. 자동 선택된 위치는 결과에서 확인해 주세요.');setBusy(true);$('progress-wrap').hidden=false;
  let processed=0;
+ // Only reuse successful search responses in this batch. Network failures are
+ // not cached, and a later batch can retry addresses that returned no match.
+ const batchSearches=new Map();
  const progress=()=>{$('progress').value=processed/rows.length*100;$('progress-label').textContent=`${processed} / ${rows.length}구간 처리`;};progress();
  try{for(const r of rows){if(stopRequested)break;if(r.invalid||r.route){processed++;progress();continue;}
    r.status='searching';r.error='';render();const errors=[];
-   for(const kind of ['origin','destination']){if(stopRequested)break;if(r[kind].point)continue;try{if(!await searchEndpoint(r,kind))errors.push(`${kind==='origin'?'출발지':'도착지'} 정확한 주소가 확인되지 않았습니다. 후보를 확인하거나 지도에서 지정해 주세요.`);}catch(e){errors.push(e.message);}}
+   for(const kind of ['origin','destination']){if(stopRequested)break;if(r[kind].point)continue;try{
+     const e=r[kind],key=addressKey(e.address)||`row:${r.id}:${kind}`;
+     if(batchSearches.has(key)){
+       const saved=batchSearches.get(key);e.point=saved.point?{...saved.point}:null;e.candidates=saved.candidates.map(p=>({...p}));e.searched=true;e.confirmed=false;
+     }else{await searchEndpoint(r,kind);batchSearches.set(key,{point:e.point?{...e.point}:null,candidates:e.candidates.map(p=>({...p}))});}
+     if(!e.point)errors.push(`${kind==='origin'?'출발지':'도착지'} 정확한 주소가 확인되지 않았습니다. 후보를 확인하거나 지도에서 지정해 주세요.`);
+   }catch(e){errors.push(e.message);}}
    if(stopRequested){r.status='pending';r.error='';break;}
    if(!errors.length&&r.origin.point&&r.destination.point){try{await routeRow(r);
      if(!r.origin.confirmed||!r.destination.confirmed)errors.push('검색 결과로 자동 계산했습니다. 출발·도착 위치를 확인해 주세요.');
@@ -102,7 +139,7 @@ async function runBatch(){if(busy||!rows.length||!config)return;stopRequested=fa
 }
 async function searchOne(kind){const r=selected();if(!r||busy||!config)return;stopRequested=false;clearRoute(r);if(!validateRow(r)){render();return;}setBusy(true);r.status='searching';try{const found=await searchEndpoint(r,kind,true);r.status='review';r.error=found?'':'정확한 주소·번호를 확인하지 못했습니다. 후보를 확인하거나 지도에서 직접 지정해 주세요.';}catch(e){r.status='error';r.error=e.message;}finally{setBusy(false);}}
 async function calculateSelected(){const r=selected();if(!r||busy||!config||!validateRow(r))return;stopRequested=false;r.origin.confirmed=true;r.destination.confirmed=true;setBusy(true);try{await routeRow(r);notify('도로거리 계산을 완료했습니다. 결과 엑셀 저장으로 내려받을 수 있습니다.');}catch(e){r.status='error';r.error=e.message;notify(e.message,true);}finally{setBusy(false);}if(r.route&&selectedId===r.id){try{await prepareMap(r);}catch(e){notify('거리 계산은 완료했습니다. '+e.message,true);}}}
-function loadMatrix(matrix,name){const parsed=parseMatrix(matrix,config.maxRows);rows=parsed;selectedId=rows[0].id;fileName=name;cancelPin();lastViewKey='';render();notify(`${rows.length}구간을 불러왔습니다. ‘전체 위치 검색·거리 계산’을 눌러주세요.`);}
+function loadMatrix(matrix,name){const parsed=parseMatrix(matrix,config.maxRows);rows=parsed;reviewOnly=false;reviewFocusKey='';downloads.clear();selectedId=rows[0].id;fileName=name;cancelPin();lastViewKey='';render();notify(`${rows.length}구간을 불러왔습니다. ‘전체 위치 검색·거리 계산’을 눌러주세요. 같은 주소는 지도에서 한 번 지정해 함께 적용할 수 있습니다.`);}
 function excelValue(cell){const v=cell.value;if(v===null||v===undefined)return '';if(typeof v==='object'){if('formula'in v||'sharedFormula'in v){if(v.result===undefined)throw new Error('결과값이 없는 수식 셀이 있습니다. 엑셀에서 계산 후 값으로 붙여넣어 주세요.');return v.result;}if(v.richText)return v.richText.map(x=>x.text).join('');if(v.text)return v.text;if(v.error)return v.error;if(v instanceof Date)return v.toISOString();}return v;}
 function sheetMatrix(sheet){if(sheet.rowCount>1020)throw new Error('행이 너무 많습니다. 필요한 주소 행만 새 파일에 복사해 주세요.');if(sheet.columnCount>100)throw new Error('열이 너무 많습니다. 필요한 열만 새 파일에 복사해 주세요.');const matrix=[];sheet.eachRow({includeEmpty:true},row=>{const values=[];for(let c=1;c<=Math.min(sheet.columnCount,100);c++)values.push(excelValue(row.getCell(c)));matrix.push(values);});return matrix;}
 async function importFile(file){if(!file||busy)return;if(!config){notify('지도 설정을 불러오는 중입니다. 잠시 뒤 다시 시도해 주세요.');return;}if(!/\.(xlsx|csv)$/i.test(file.name)){notify('XLSX 또는 CSV 파일을 선택해 주세요. XLS는 엑셀에서 XLSX로 저장해 주세요.',true);return;}if(file.size>5*1024*1024){notify('5MB 이하의 파일을 사용해 주세요. 필요한 주소 행만 새 파일에 복사하면 용량을 줄일 수 있습니다.',true);return;}
@@ -163,12 +200,15 @@ function bindEvents(){
  $('template-btn').onclick=()=>saveWorkbook([{출발지:'안산시 단원구 화랑로 387',도착지:'안산시 상록구 석호로 110'},{출발지:'안산시 단원구 고잔동 중앙역',도착지:'시흥시 정왕동 정왕역'}],'경로노트_주소입력양식.xlsx');
  $('route-list').onclick=e=>{const item=e.target.closest('[data-id]');if(item&&!busy){selectedId=+item.dataset.id;cancelPin();render();}else if(e.target.closest('#empty-sample'))sample();};
  $('batch-btn').onclick=runBatch;$('stop-btn').onclick=()=>{stopRequested=true;activeController?.abort();$('stop-btn').disabled=true;};
- $('clear-btn').onclick=()=>{rows=[];selectedId=null;fileName='';sheets=[];removeSheetPicker();cancelPin();render();notify('');};
+ $('review-toggle').onclick=()=>{if(busy)return;reviewOnly=!reviewOnly;renderList();};
+ $('next-review').onclick=nextPendingAddress;
+ $('pending-addresses').onclick=e=>{const b=e.target.closest('[data-review]');if(b)selectPendingAddress(+b.dataset.review);};
+ $('clear-btn').onclick=()=>{rows=[];selectedId=null;fileName='';sheets=[];reviewOnly=false;reviewFocusKey='';downloads.clear();removeSheetPicker();cancelPin();render();notify('');};
  $('export-btn').onclick=()=>exportWithMaps('xlsx');$('zip-btn').onclick=()=>exportWithMaps('zip');
  $('fit-btn').onclick=()=>{if(!busy)drawMap(true);};$('cancel-pin').onclick=()=>{cancelPin();drawMap();};
- $('inspector').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.dataset.search)searchOne(b.dataset.search);else if(b.dataset.pin)beginPin(b.dataset.pin);else if(b.id==='calculate-selected')calculateSelected();else if(b.id==='png-btn')saveSelectedMap();});
+ $('inspector').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.dataset.search)searchOne(b.dataset.search);else if(b.dataset.pin)beginPin(b.dataset.pin);else if(b.id==='calculate-selected')calculateSelected();else if(b.id==='inspector-next')nextPendingAddress();else if(b.id==='png-btn')saveSelectedMap();});
  $('inspector').addEventListener('input',e=>{if(busy)return;const r=selected(),kind=e.target.dataset.address;if(!r||!kind)return;const address=clean(e.target.value);if(address===r[kind].address)return;r[kind]={address,point:null,candidates:[],confirmed:false,searched:false};clearRoute(r);validateRow(r);renderList();drawMap();const editor=e.target.closest('.point-editor');editor.querySelector('select')?.remove();editor.querySelector('.coordinate').textContent='주소를 검색하거나 지도에서 지정하세요.';$('calculate-selected').disabled=true;$('calculate-selected').textContent='위치 확인·거리 계산';document.querySelector('.route-measure')?.remove();document.querySelector('.snap-note')?.remove();document.querySelector('.row-error')?.remove();});
- $('inspector').addEventListener('change',e=>{if(busy)return;const r=selected();if(!r)return;const candidate=e.target.dataset.candidate;if(candidate){const p=r[candidate].candidates[+e.target.value];if(p&&!p.requiresMapSelection){r[candidate].point=p;r[candidate].confirmed=false;clearRoute(r);render();}}});
+ $('inspector').addEventListener('change',e=>{if(busy)return;if(e.target.matches('[data-share-address]')){shareSameAddress=e.target.checked;renderInspector();return;}const r=selected();if(!r)return;const candidate=e.target.dataset.candidate;if(candidate){const p=r[candidate].candidates[+e.target.value];if(p&&!p.requiresMapSelection){r[candidate].point=p;r[candidate].confirmed=false;clearRoute(r);render();}}});
  document.addEventListener('dragover',e=>{if(e.dataTransfer?.types.includes('Files')){e.preventDefault();document.body.classList.add('drop-active');}});document.addEventListener('dragleave',e=>{if(!e.relatedTarget)document.body.classList.remove('drop-active');});document.addEventListener('drop',e=>{e.preventDefault();document.body.classList.remove('drop-active');if(e.dataTransfer?.files.length)importFile(e.dataTransfer.files[0]);});document.addEventListener('keydown',e=>{if(e.key==='Escape'){cancelPin();drawMap();}});
 }
 function registerAgentTools(){if(!document.modelContext?.registerTool)return;const controller=new AbortController();window.addEventListener('pagehide',()=>controller.abort(),{once:true});
@@ -180,3 +220,4 @@ async function init(){bindEvents();try{const res=await fetch('./config.json');if
  if(!window.L)throw new Error('지도를 불러오지 못했습니다. 새로고침해 주세요.');map=L.map('map',{zoomControl:false,scrollWheelZoom:true,minZoom:10,maxBounds:[[37.25,126.67],[37.42,126.96]],maxBoundsViscosity:1}).setView([37.337,126.812],12);L.control.zoom({position:'bottomleft'}).addTo(map);L.control.scale({position:'bottomleft',imperial:false}).addTo(map);const tiles=L.tileLayer(config.tiles,{maxZoom:19,crossOrigin:'anonymous',attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors · <a href="https://project-osrm.org" target="_blank">OSRM</a>'}).addTo(map);tileLayer=tiles;let tileFailures=0;tiles.on('tileerror',()=>{if(++tileFailures===5)notify('배경지도를 불러오지 못하고 있습니다. 인터넷 연결을 확인해 주세요.',true);});layer=L.featureGroup().addTo(map);map.on('click',e=>{if(pinMode)setPoint(pinMode,e.latlng);});new ResizeObserver(()=>map.invalidateSize()).observe($('map'));render();registerAgentTools();
  }catch(e){notify(e.message,true);$('upload-btn').disabled=true;$('sample-btn').disabled=true;}}
 if(document.readyState==='complete')init();else window.addEventListener('load',init,{once:true});
+
