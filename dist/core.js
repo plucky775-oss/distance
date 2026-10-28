@@ -51,19 +51,49 @@ export function parseMatrix(matrix,maxRows=200){
     return {id:i+1,sourceRow,original:headers.map((h,j)=>[h||`열${j+1}`,clean(cells[j])]),origin,destination,status:errors.length?'error':'pending',error:[...new Set(errors)].join(' / '),invalid:errors.length>0,route:null};
   });
 }
+export function normalizeAddress(address){
+ const q=clean(address).replace(/\s+/g,' ');
+ if(/^(?:단원구|상록구)\s/.test(q))return '경기도 안산시 '+q;
+ if(/^정왕(?:본|[1-4])?동(?:\s|$)/.test(q))return '경기도 시흥시 '+q;
+ return q;
+}
+const comparable=s=>clean(s).toLowerCase().replace(/[\s\-_,.]/g,'');
+function candidateMatch(p,query){
+ const q=normalizeAddress(query);
+ if(p.osm_key==='place'||p.osm_key==='highway'||['locality','district','city','county','state','country','street'].includes(p.type))
+   return {autoSelectable:false,requiresMapSelection:true,matchNote:'동·도로 중심점: 지도에서 직접 지정'};
+ const numbered=q.match(/(?:^|\s)(산\s*)?(\d+(?:-\d+)?)\s*(?:번지)?$/);
+ if(numbered){
+   // A matching number alone is not enough: the street/dong must also match.
+   const prefix=q.slice(0,numbered.index).trim();
+   const locality=prefix.split(/\s+/).at(-1)||'';
+   const sameNumber=!numbered[1]&&clean(p.housenumber)===numbered[2];
+   const sameLocality=/(?:로|길)$/.test(locality)&&comparable(p.street)===comparable(locality); // Photon housenumber is not proof of a Korean parcel number.
+   const ok=!!(sameNumber&&sameLocality);
+   return {autoSelectable:ok,requiresMapSelection:!ok,matchNote:ok?'주소명·번호 일치 · 위치 확인 권장':'지번·건물번호 미확인: 지도에서 직접 지정'};
+ }
+ const name=q.replace(/^(?:(?:경기도|안산시|시흥시|단원구|상록구|[가-힣0-9]+동)\s+)+/,'');
+ const ok=!!name&&comparable(name)===comparable(p.name);
+ return {autoSelectable:ok,requiresMapSelection:!ok,matchNote:ok?'장소명 일치 · 위치 확인 권장':'장소명 불일치: 지도에서 직접 지정'};
+}
 export function photonPoints(data,query){
-  return (data.features||[]).filter(f=>{
-    const p=f.properties||{},c=f.geometry?.coordinates;
-    if(!Array.isArray(c)||!insideBox(c[0],c[1]))return false;
-    const location=[p.name,p.city,p.district,p.locality,p.street,p.county].filter(Boolean).join(' ');
-    if(excludedAddress(location))return false;
-    // Keep only the requested administrative names. A missing locality is left for manual map selection.
-    return location.includes('안산') || (location.includes('시흥') && location.includes('정왕'));
-  }).map(f=>{
-    const p=f.properties,c=f.geometry.coordinates;
-    const label=[...new Set([p.city,p.district,p.locality,p.street,p.housenumber,p.name].filter(Boolean))].join(' ');
-    return {lat:c[1],lng:c[0],label:label||query,source:'주소검색',kind:p.osm_value||p.type||''};
-  });
+ const seen=new Set();
+ return (data.features||[]).filter(f=>{
+   const p=f.properties||{},c=f.geometry?.coordinates;
+   if(!Array.isArray(c)||!insideBox(c[0],c[1]))return false;
+   if(p.countrycode&&p.countrycode.toUpperCase()!=='KR')return false;
+   const location=[p.name,p.city,p.district,p.locality,p.street,p.county].filter(Boolean).join(' ');
+   if(excludedAddress(location)||/\b(?:daebu|seongam|pungdo)/i.test(location))return false;
+   const admin=[p.city,p.district,p.locality,p.county].map(comparable);
+   const ansan=admin.some(v=>/^(?:안산시?|ansan(?:si)?)$/.test(v));
+   const siheung=admin.some(v=>/^(?:시흥시?|siheung(?:si)?)$/.test(v));
+   const jeongwang=[...admin,comparable(p.name)].some(v=>/^(?:정왕(?:본|[1-4])?동|jeongwang(?:bon|[1-4])?(?:dong)?)$/.test(v));
+   return ansan||(siheung&&jeongwang);
+ }).map(f=>{
+   const p=f.properties,c=f.geometry.coordinates;
+   const label=[...new Set([p.city,p.district,p.locality,p.street,p.housenumber,p.name].filter(Boolean))].join(' ');
+   return {lat:c[1],lng:c[0],label:label||query,source:'주소검색',kind:p.osm_value||p.type||'',...candidateMatch(p,query)};
+ }).filter(p=>{const id=JSON.stringify([p.lat,p.lng,p.label]);if(seen.has(id))return false;seen.add(id);return true;});
 }
 export function parseRoute(data){
   if(data.code!=='Ok'||!data.routes?.length)throw new Error(data.code==='NoSegment'?'선택한 지점 300m 안에 연결 가능한 도로가 없습니다. 가까운 도로 입구로 위치를 옮겨 주세요.':'자동차로 연결되는 경로를 찾지 못했습니다. 두 지점의 위치를 확인해 주세요.');
