@@ -4,7 +4,7 @@
   "private": true,
   "description": "Excel address pairs, road distances and embedded route maps",
   "scripts": {
-    "test": "node verify.mjs && node verify-map-export.mjs && node verify-result-package.mjs && node verify-download.mjs && node verify-native-download.mjs && node verify-batch.mjs && node verify-map-compression.mjs && node verify-export-batch.mjs",
+    "test": "node verify.mjs && node verify-map-export.mjs && node verify-result-package.mjs && node verify-download.mjs && node verify-native-download.mjs && node verify-batch.mjs && node verify-map-compression.mjs && node verify-export-batch.mjs && node verify-manual-pin.mjs",
     "android:prepare": "node scripts/prepare-android.mjs",
     "android:sync": "npm run android:prepare && cap sync android",
     "android:open": "npm run android:sync && cap open android",
