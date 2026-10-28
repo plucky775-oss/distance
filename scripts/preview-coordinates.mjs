@@ -14,8 +14,14 @@ http.createServer(async(req,res)=>{
  const url=new URL(req.url,`http://${req.headers.host||'localhost:4173'}`);
  const json=data=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
  res.setHeader('Cache-Control','no-store');
- if(url.pathname==='/config.json')return json({geocoder:url.origin+'/mock-search',router:url.origin+'/mock-route/',tiles:url.origin+'/mock-tile/{z}/{x}/{y}',maxRows:200,requestIntervalMs:1,bbox:[126.67,37.25,126.96,37.42]});
+ if(url.pathname==='/config.json')return json({roadAddressApi:url.origin+'/mock-road',geocoder:url.origin+'/mock-search',router:url.origin+'/mock-route/',tiles:url.origin+'/mock-tile/{z}/{x}/{y}',maxRows:200,requestIntervalMs:1,bbox:[126.67,37.25,126.96,37.42]});
+ if(url.pathname==='/mock-road'){
+   let body='';for await(const chunk of req)body+=chunk;const {address}=JSON.parse(body);
+   return json({candidates:address.includes('고잔동 518')?[{roadAddress:'경기도 안산시 단원구 시험로 10',buildingName:'검증용 가상 건물'}]:address.includes('정왕동 1351')?[{roadAddress:'경기도 시흥시 시험로 20',buildingName:'검증용 가상 건물 A'},{roadAddress:'경기도 시흥시 시험로 20-1',buildingName:'검증용 가상 건물 B'}]:[]});
+ }
  if(url.pathname==='/mock-search'){
+   const q=url.searchParams.get('q');
+   if(q.includes('시험로'))return json({features:[{geometry:{coordinates:[q.includes('시흥시')?126.746:126.831,q.includes('시흥시')?37.347:37.322]},properties:{city:q.includes('시흥시')?'시흥시':'안산시',district:q.includes('시흥시')?'정왕동':'단원구',street:'시험로',housenumber:q.split(' ').at(-1),type:'house'}}]});
    const p=places[url.searchParams.get('q')];
    return json({features:p?[{geometry:{coordinates:p.slice(0,2)},properties:{name:p[2],city:p[3],district:p[4],type:'house'}}]:[]});
  }

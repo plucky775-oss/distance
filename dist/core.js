@@ -6,7 +6,8 @@ const aliases = {
   origin:['출발지','출발주소','출발지주소','출발','시작주소','origin','from','start'],
   destination:['도착지','도착주소','도착지주소','도착','목적지','destination','to','end'],
   originLat:['출발위도','출발지위도','originlat'],originLng:['출발경도','출발지경도','originlng','originlon'],
-  destinationLat:['도착위도','도착지위도','destinationlat'],destinationLng:['도착경도','도착지경도','destinationlng','destinationlon']
+  destinationLat:['도착위도','도착지위도','destinationlat'],destinationLng:['도착경도','도착지경도','destinationlng','destinationlon'],
+  originRoad:['출발도로명주소'],destinationRoad:['도착도로명주소']
 };
 export function insideBox(lng,lat,bbox=AREA.bbox){return Number.isFinite(lng)&&Number.isFinite(lat)&&lng>=bbox[0]&&lng<=bbox[2]&&lat>=bbox[1]&&lat<=bbox[3];}
 export function excludedAddress(address){return /대부(?:도|동|북동|남동|동동)|선감동|풍도동/.test(address);}
@@ -45,7 +46,7 @@ export function parseMatrix(matrix,maxRows=200){
         if(!lat||!lng||!insideBox(Number(lng),Number(lat)))errors.push('위도·경도가 없거나 대상 지도 범위를 벗어납니다.');
         else point={lat:Number(lat),lng:Number(lng),label:address,source:'엑셀 좌표'};
       }
-      return {address,point,candidates:[],confirmed:!!point,searched:!!point};
+      return {address,point,candidates:[],confirmed:!!point,searched:!!point,roadAddress:clean(cells[columns[kind+'Road']]),roadStatus:'',roadCandidates:[]};
     }
     const origin=endpoint('origin'),destination=endpoint('destination');
     return {id:i+1,sourceRow,original:headers.map((h,j)=>[h||`열${j+1}`,clean(cells[j])]),origin,destination,status:errors.length?'error':'pending',error:[...new Set(errors)].join(' / '),invalid:errors.length>0,route:null};
@@ -127,6 +128,8 @@ export function exportRecords(rows){return rows.map(r=>({
   '도착지-도로간거리(m)':r.route?.snaps[1]?.distance!==undefined?Math.round(r.route.snaps[1].distance):'',
   상태:statusLabel(r),확인사항:r.error||'',계산시각:r.route?.calculatedAt||'',경로출처:r.route?'OSRM / OpenStreetMap':'',
   번호:r.id,출발위치상태:coordinateStatus(r.origin),도착위치상태:coordinateStatus(r.destination),
-  출발좌표출처:r.origin.point?.source||'',도착좌표출처:r.destination.point?.source||''
+  출발좌표출처:r.origin.point?.source||'',도착좌표출처:r.destination.point?.source||'',
+  출발도로명주소:r.origin.roadAddress||'',도착도로명주소:r.destination.roadAddress||'',
+  출발도로명변환상태:r.origin.roadStatus||'',도착도로명변환상태:r.destination.roadStatus||''
 }));}
 

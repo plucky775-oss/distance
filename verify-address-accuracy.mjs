@@ -28,7 +28,8 @@ const source=fs.readFileSync('dist/app.js','utf8');
 const search=source.slice(source.indexOf('async function searchEndpoint'),source.indexOf('async function routeRow'));
 let payload=english;
 const calls=[];
-const c={normalizeAddress,excludedAddress,photonPoints,URL,searchCache:new Map(),config:{geocoder:'https://example.test/api/',bbox:[126.67,37.25,126.96,37.42]},requestJSON:async(url,options)=>{calls.push({url:String(url),options});return payload;}};
+// Isolate Photon safeguards here; official conversion is integrated in verify-road-address.
+const c={resolveRoadAddress:async e=>normalizeAddress(e.address),roadCache:new Map(),normalizeAddress,excludedAddress,photonPoints,URL,searchCache:new Map(),config:{geocoder:'https://example.test/api/',bbox:[126.67,37.25,126.96,37.42]},requestJSON:async(url,options)=>{calls.push({url:String(url),options});return payload;}};
 vm.createContext(c);vm.runInContext(search,c);
 const r={origin:{address:'단원구 고잔동 518'}};
 assert.equal(await c.searchEndpoint(r,'origin'),false);assert.equal(r.origin.point,null);assert.equal(r.origin.candidates.length,3);
@@ -45,3 +46,4 @@ await assert.rejects(c.routeRow({origin:{point:{source:'주소검색',requiresMa
 assert.match(source,/p&&!p.requiresMapSelection/);
 assert.match(source,/p.requiresMapSelection\?'disabled'/);
 console.log('Address safeguards: Korean/English regions, parcel/center mismatch rejection, road name+number matching, ambiguous results, explicit retry, empty-cache retry, and routing guard passed.');
+

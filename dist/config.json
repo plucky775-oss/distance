@@ -1,5 +1,6 @@
 {
   "geocoder": "https://photon.komoot.io/api/",
+  "roadAddressApi": "https://ansan-ditance.netlify.app/api/road-address",
   "router": "https://router.project-osrm.org/route/v1/driving/",
   "tiles": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
   "maxRows": 200,
@@ -11,3 +12,4 @@
     37.42
   ]
 }
+
